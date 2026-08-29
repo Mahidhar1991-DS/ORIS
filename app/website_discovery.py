@@ -86,12 +86,14 @@ Rules:
 
 14. Return valid JSON only.
 
+15. Keep the reason SHORT. Do not write a long explanation.
+
 Return exactly:
 
 {
   "website": null,
   "confidence": 0.0,
-  "reason": "..."
+  "reason": "Short explanation."
 }
 
 or:
@@ -99,12 +101,11 @@ or:
 {
   "website": "https://example.com",
   "confidence": 0.0,
-  "reason": "..."
+  "reason": "Short explanation."
 }
 """
 
 
-# Domains that should never be accepted as the official quarry website.
 BLOCKED_DOMAINS = {
     "google.com",
     "www.google.com",
@@ -136,9 +137,6 @@ def normalize_website(
 ) -> str | None:
     """
     Normalize and validate a candidate website.
-
-    This function performs application-level validation in addition
-    to the AI's website selection rules.
     """
 
     if not url:
@@ -152,7 +150,6 @@ def normalize_website(
     if not url:
         return None
 
-    # Remove common wrapping characters that an LLM might return.
     url = url.strip(
         "\"'<>"
     )
@@ -183,11 +180,134 @@ def normalize_website(
 
     hostname = hostname.lower().rstrip(".")
 
-    # Reject obvious non-official destinations.
     if hostname in BLOCKED_DOMAINS:
         return None
 
     return url
+
+
+def _parse_website_response(
+    text: str,
+) -> dict | None:
+    """
+    Parse the model response safely.
+
+    Handles common cases such as:
+    - normal JSON
+    - JSON wrapped in markdown fences
+    - JSON with surrounding whitespace
+    """
+
+    if not text:
+        return None
+
+    text = text.strip()
+
+    # Remove markdown code fences if the model adds them.
+    if text.startswith("```"):
+        lines = text.splitlines()
+
+        if lines:
+            lines = lines[1:]
+
+        if lines and lines[-1].strip() == "```":
+            lines = lines[:-1]
+
+        text = "\n".join(lines).strip()
+
+        if text.lower().startswith("json"):
+            text = text[4:].strip()
+
+    try:
+        data = json.loads(text)
+    except json.JSONDecodeError:
+        return None
+
+    if not isinstance(data, dict):
+        return None
+
+    return data
+
+
+async def _request_website_discovery(
+    client: AsyncOpenAI,
+    model: str,
+    prompt: str,
+) -> str | None:
+    """
+    Execute one website discovery request.
+
+    Uses structured JSON output so that the model is strongly
+    constrained to return the expected object.
+    """
+
+    try:
+        response = await client.responses.create(
+            model=model,
+            tools=[
+                {
+                    "type": "web_search",
+                }
+            ],
+            max_output_tokens=300,
+            input=[
+                {
+                    "role": "system",
+                    "content": SYSTEM_PROMPT,
+                },
+                {
+                    "role": "user",
+                    "content": prompt,
+                },
+            ],
+            text={
+                "format": {
+                    "type": "json_schema",
+                    "name": "quarry_website_result",
+                    "strict": True,
+                    "schema": {
+                        "type": "object",
+                        "properties": {
+                            "website": {
+                                "type": [
+                                    "string",
+                                    "null",
+                                ]
+                            },
+                            "confidence": {
+                                "type": "number",
+                            },
+                            "reason": {
+                                "type": "string",
+                            },
+                        },
+                        "required": [
+                            "website",
+                            "confidence",
+                            "reason",
+                        ],
+                        "additionalProperties": False,
+                    },
+                }
+            },
+        )
+
+    except Exception as exc:
+        logger.exception(
+            "Website discovery request failed: %s",
+            exc,
+        )
+        return None
+
+    text = response.output_text
+
+    if not text:
+        logger.warning(
+            "Website discovery returned empty output."
+        )
+        return None
+
+    return text
 
 
 async def discover_website(
@@ -347,21 +467,9 @@ If multiple candidate quarries are found and none can
 be reliably matched to the supplied coordinates,
 return null.
 
-Return only this JSON:
+Keep the reason short.
 
-{{
-  "website": null,
-  "confidence": 0.0,
-  "reason": "..."
-}}
-
-or:
-
-{{
-  "website": "https://example.com",
-  "confidence": 0.0,
-  "reason": "..."
-}}
+Return only the required JSON object.
 """
 
     logger.info(
@@ -373,84 +481,88 @@ or:
         longitude,
     )
 
-    # ---------------------------------------------------------
-    # Create OpenAI client.
-    # ---------------------------------------------------------
     client = AsyncOpenAI(
         api_key=api_key
     )
 
-    # ---------------------------------------------------------
-    # Call OpenAI web search.
-    # ---------------------------------------------------------
-    try:
-        response = await client.responses.create(
-            model=os.getenv(
-                "OPENAI_MODEL",
-                "gpt-5.4-mini",
-            ),
-            tools=[
-                {
-                    "type": "web_search",
-                }
-            ],
-            input=[
-                {
-                    "role": "system",
-                    "content": SYSTEM_PROMPT,
-                },
-                {
-                    "role": "user",
-                    "content": prompt,
-                },
-            ],
-        )
-
-    except Exception as exc:
-        logger.exception(
-            "Website discovery failed for "
-            "quarry=%r municipality=%r coordinates=(%s,%s): %s",
-            quarry_name,
-            municipality,
-            latitude,
-            longitude,
-            exc,
-        )
-        return None
+    model = os.getenv(
+        "OPENAI_MODEL",
+        "gpt-5.4-mini",
+    )
 
     # ---------------------------------------------------------
-    # Read model output.
+    # First attempt.
     # ---------------------------------------------------------
-    text = response.output_text
+    text = await _request_website_discovery(
+        client,
+        model,
+        prompt,
+    )
 
     if not text:
-        logger.warning(
-            "Website discovery returned empty output: "
-            "quarry=%r municipality=%r",
-            quarry_name,
-            municipality,
-        )
         return None
 
-    text = text.strip()
+    data = _parse_website_response(
+        text
+    )
 
     # ---------------------------------------------------------
-    # Parse JSON.
+    # Retry once if the response is malformed.
     # ---------------------------------------------------------
-    try:
-        data = json.loads(text)
-
-    except json.JSONDecodeError:
+    if data is None:
         logger.warning(
-            "Website discovery returned invalid JSON: %r",
-            text[:500],
+            "Website discovery returned invalid JSON. "
+            "Retrying with a shorter response requirement."
         )
-        return None
 
-    if not isinstance(data, dict):
+        retry_prompt = f"""
+Identify the official quarry operator website.
+
+Quarry name:
+{quarry_name or "UNKNOWN"}
+
+Municipality:
+{municipality or "UNKNOWN"}
+
+Coordinates:
+{latitude}, {longitude}
+
+Use web search.
+
+Only return a website if you can establish a credible
+connection between the quarry, its operator, the location,
+and the official company website.
+
+Never guess.
+
+Return ONLY this JSON object:
+
+{{
+  "website": null,
+  "confidence": 0.0,
+  "reason": "short reason"
+}}
+
+The reason must be fewer than 20 words.
+"""
+
+        text = await _request_website_discovery(
+            client,
+            model,
+            retry_prompt,
+        )
+
+        if not text:
+            return None
+
+        data = _parse_website_response(
+            text
+        )
+
+    if data is None:
         logger.warning(
-            "Website discovery returned non-object JSON: %r",
-            data,
+            "Website discovery returned invalid JSON after retry: %r",
+            text[:500] if text else "",
         )
         return None
 
@@ -485,7 +597,6 @@ or:
     except (TypeError, ValueError):
         confidence = 0.0
 
-    # Reject invalid confidence values.
     if not 0.0 <= confidence <= 1.0:
         logger.warning(
             "Invalid confidence returned by website discovery: %r",
