@@ -227,7 +227,7 @@ async def extract(
     response = await client.chat.completions.create(
     model=os.getenv("OPENAI_MODEL", "gpt-5.4-mini"),
     temperature=0,
-    max_tokens=800,
+    max_completion_tokens=800,
         response_format={"type": "json_object"},
         messages=[
             {
