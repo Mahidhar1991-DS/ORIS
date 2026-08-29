@@ -320,7 +320,153 @@ async def test_discover_uses_second_overpass_endpoint(
     assert len(calls) == 2
     assert result[0].name == "Fallback Quarry"
     assert result[0].municipality == "Paris"
-    
+
+
+def test_verify_extracted_location_match():
+    from app.models import (
+        ExtractionResult,
+        FieldValue,
+        LocationVerification,
+    )
+    from app.pipeline import verify_extracted_location
+
+    extraction = ExtractionResult(
+        official_name=FieldValue(
+            value=None,
+            confidence=0.0,
+        ),
+        site_type=FieldValue(
+            value=None,
+            confidence=0.0,
+        ),
+        description=FieldValue(
+            value=None,
+            confidence=0.0,
+        ),
+        materials_produced=[],
+        certifications=[],
+        operational_status=FieldValue(
+            value=None,
+            confidence=0.0,
+        ),
+        location_verification=LocationVerification(
+            is_verified=False,
+            confidence=0.5,
+            extracted_city="Cormeilles-en-Parisis",
+            method="llm_inference",
+        ),
+    )
+
+    result = verify_extracted_location(
+        extraction,
+        "Cormeilles-en-Parisis",
+    )
+
+    assert result.location_verification.is_verified is True
+    assert result.location_verification.confidence == 1.0
+    assert (
+        result.location_verification.method
+        == "string_match"
+    )
+
+def test_verify_extracted_location_mismatch():
+    from app.models import (
+        ExtractionResult,
+        FieldValue,
+        LocationVerification,
+    )
+    from app.pipeline import verify_extracted_location
+
+    extraction = ExtractionResult(
+        official_name=FieldValue(
+            value=None,
+            confidence=0.0,
+        ),
+        site_type=FieldValue(
+            value=None,
+            confidence=0.0,
+        ),
+        description=FieldValue(
+            value=None,
+            confidence=0.0,
+        ),
+        materials_produced=[],
+        certifications=[],
+        operational_status=FieldValue(
+            value=None,
+            confidence=0.0,
+        ),
+        location_verification=LocationVerification(
+            is_verified=True,
+            confidence=0.95,
+            extracted_city="Trehorenteuc",
+            method="llm_inference",
+        ),
+    )
+
+    result = verify_extracted_location(
+        extraction,
+        "Saclay",
+    )
+
+    assert result.location_verification.is_verified is False
+    assert result.location_verification.confidence == 0.0
+    assert (
+        result.location_verification.method
+        == "none"
+    )
+    assert (
+        result.location_verification.extracted_city
+        == "Trehorenteuc"
+    )
+
+def test_verify_extracted_location_missing_city():
+    from app.models import (
+        ExtractionResult,
+        FieldValue,
+        LocationVerification,
+    )
+    from app.pipeline import verify_extracted_location
+
+    extraction = ExtractionResult(
+        official_name=FieldValue(
+            value=None,
+            confidence=0.0,
+        ),
+        site_type=FieldValue(
+            value=None,
+            confidence=0.0,
+        ),
+        description=FieldValue(
+            value=None,
+            confidence=0.0,
+        ),
+        materials_produced=[],
+        certifications=[],
+        operational_status=FieldValue(
+            value=None,
+            confidence=0.0,
+        ),
+        location_verification=LocationVerification(
+            is_verified=False,
+            confidence=0.0,
+            extracted_city=None,
+            method="none",
+        ),
+    )
+
+    result = verify_extracted_location(
+        extraction,
+        "Saclay",
+    )
+
+    assert result.location_verification.is_verified is False
+    assert (
+        result.location_verification.extracted_city
+        is None
+    )
+
+
 @pytest.mark.asyncio
 async def test_discover_returns_empty_when_provider_succeeds(
     monkeypatch,

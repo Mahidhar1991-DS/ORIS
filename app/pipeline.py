@@ -1,4 +1,5 @@
 import hashlib
+import unicodedata
 from uuid import uuid4
 
 from app.crawler import crawl, crawl_with_status
@@ -52,6 +53,74 @@ async def process_quarry(
         document
     )
 
+def verify_extracted_location(
+    extraction: ExtractionResult,
+    quarry_municipality: str | None,
+) -> ExtractionResult:
+    """
+    Apply a deterministic geographic consistency check.
+
+    The LLM may extract a city from the crawled website,
+    but the final verification is performed against the
+    municipality resolved for the OSM quarry.
+
+    A mismatch does not discard the extraction. It only
+    marks the location as unverified.
+    """
+
+    if not quarry_municipality:
+        return extraction
+
+    extracted_city = (
+        extraction.location_verification.extracted_city
+    )
+
+    if not extracted_city:
+        return extraction
+
+    def normalize(value: str) -> str:
+        import unicodedata
+
+        value = unicodedata.normalize(
+            "NFKD",
+            value,
+        )
+
+        value = "".join(
+            character
+            for character in value
+            if not unicodedata.combining(character)
+        )
+
+        return " ".join(
+            value.lower()
+            .replace("-", " ")
+            .replace("'", " ")
+            .split()
+        )
+
+    expected = normalize(
+        quarry_municipality
+    )
+
+    actual = normalize(
+        extracted_city
+    )
+
+    if expected == actual:
+        extraction.location_verification.is_verified = True
+        extraction.location_verification.confidence = 1.0
+        extraction.location_verification.method = (
+            "string_match"
+        )
+
+        return extraction
+
+    extraction.location_verification.is_verified = False
+    extraction.location_verification.confidence = 0.0
+    extraction.location_verification.method = "none"
+
+    return extraction
 
 def build_run_metadata(
     text: str,
@@ -226,6 +295,11 @@ async def run_pipeline(
         # -----------------------------------------------------
         extraction = await extract(
             document
+        )
+
+        extraction = verify_extracted_location(
+            extraction=extraction,
+            quarry_municipality=quarry.municipality,
         )
 
         # -----------------------------------------------------
