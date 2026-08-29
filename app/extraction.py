@@ -157,11 +157,23 @@ def _list_from_response(
     document: Document,
     data: list,
 ) -> list[FieldValue]:
-    return [
-        _field_from_response(document, item)
-        for item in data
-        if isinstance(item, dict)
-    ]
+    results = []
+
+    for item in data:
+        if not isinstance(item, dict):
+            continue
+
+        field = _field_from_response(
+            document,
+            item,
+        )
+
+        if field.value is None:
+            continue
+
+        results.append(field)
+
+    return results
 
 
 def _empty_field(reason: str) -> FieldValue:

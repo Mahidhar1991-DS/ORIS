@@ -192,6 +192,7 @@ async def run_pipeline(
         latitude=latitude,
         longitude=longitude,
         radius_km=radius_km,
+        max_usd_cost=max_usd_cost,
     )
 
     results = []
