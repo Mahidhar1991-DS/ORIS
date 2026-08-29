@@ -1,0 +1,716 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+    <title>ORIS — Quarry Intelligence</title>
+
+    <style>
+        * {
+            box-sizing: border-box;
+        }
+
+        body {
+            margin: 0;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI",
+                Roboto, Helvetica, Arial, sans-serif;
+            background: #f5f7fa;
+            color: #172033;
+        }
+
+        header {
+            background: #172033;
+            color: white;
+            padding: 24px 32px;
+        }
+
+        header h1 {
+            margin: 0;
+            font-size: 28px;
+        }
+
+        header p {
+            margin: 6px 0 0;
+            opacity: 0.75;
+        }
+
+        main {
+            max-width: 1200px;
+            margin: 32px auto;
+            padding: 0 20px;
+        }
+
+        .card {
+            background: white;
+            border-radius: 12px;
+            padding: 24px;
+            margin-bottom: 24px;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.06);
+        }
+
+        .search-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 16px;
+        }
+
+        label {
+            display: block;
+            font-weight: 600;
+            margin-bottom: 6px;
+        }
+
+        input {
+            width: 100%;
+            padding: 11px 12px;
+            border: 1px solid #ccd3df;
+            border-radius: 7px;
+            font-size: 15px;
+        }
+
+        button {
+            margin-top: 20px;
+            padding: 12px 20px;
+            border: none;
+            border-radius: 7px;
+            background: #2563eb;
+            color: white;
+            font-size: 15px;
+            font-weight: 600;
+            cursor: pointer;
+        }
+
+        button:hover {
+            background: #1d4ed8;
+        }
+
+        button:disabled {
+            background: #9ca3af;
+            cursor: not-allowed;
+        }
+
+        .status {
+            display: none;
+        }
+
+        .status.visible {
+            display: block;
+        }
+
+        .progress-container {
+            width: 100%;
+            height: 12px;
+            background: #e5e7eb;
+            border-radius: 20px;
+            overflow: hidden;
+            margin: 14px 0;
+        }
+
+        .progress-bar {
+            height: 100%;
+            width: 0%;
+            background: #2563eb;
+            transition: width 0.4s ease;
+        }
+
+        .status-text {
+            font-weight: 600;
+        }
+
+        .error {
+            color: #b91c1c;
+            background: #fee2e2;
+            padding: 12px;
+            border-radius: 7px;
+            margin-top: 12px;
+        }
+
+        .results-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .quarry {
+            border: 1px solid #e1e5eb;
+            border-radius: 10px;
+            padding: 18px;
+            margin-top: 16px;
+        }
+
+        .quarry h3 {
+            margin: 0 0 8px;
+        }
+
+        .meta {
+            color: #667085;
+            font-size: 14px;
+            margin-bottom: 12px;
+        }
+
+        .badge {
+            display: inline-block;
+            padding: 4px 9px;
+            border-radius: 20px;
+            background: #e5e7eb;
+            font-size: 12px;
+            font-weight: 600;
+            margin-bottom: 12px;
+        }
+
+        .badge.extracted {
+            background: #dcfce7;
+            color: #166534;
+        }
+
+        .badge.no-website,
+        .badge.crawl-failed {
+            background: #fef3c7;
+            color: #92400e;
+        }
+
+        .facts {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 12px;
+            margin-top: 14px;
+        }
+
+        .fact {
+            background: #f8fafc;
+            padding: 12px;
+            border-radius: 7px;
+        }
+
+        .fact strong {
+            display: block;
+            margin-bottom: 5px;
+        }
+
+        .confidence {
+            color: #667085;
+            font-size: 12px;
+        }
+
+        .evidence {
+            margin-top: 16px;
+            padding: 14px;
+            background: #fff7ed;
+            border-left: 4px solid #f97316;
+            border-radius: 5px;
+        }
+
+        .evidence blockquote {
+            margin: 6px 0 0;
+            font-style: italic;
+        }
+
+        .empty {
+            color: #667085;
+            text-align: center;
+            padding: 30px;
+        }
+
+        @media (max-width: 700px) {
+            .search-grid,
+            .facts {
+                grid-template-columns: 1fr;
+            }
+        }
+    </style>
+</head>
+
+<body>
+
+<header>
+    <h1>ORIS</h1>
+    <p>Quarry Intelligence &amp; Research System</p>
+</header>
+
+<main>
+
+    <section class="card">
+        <h2>Search for quarries</h2>
+
+        <div class="search-grid">
+
+            <div>
+                <label for="latitude">Latitude</label>
+                <input
+                    id="latitude"
+                    type="number"
+                    step="any"
+                    value="48.8566"
+                >
+            </div>
+
+            <div>
+                <label for="longitude">Longitude</label>
+                <input
+                    id="longitude"
+                    type="number"
+                    step="any"
+                    value="2.3522"
+                >
+            </div>
+
+            <div>
+                <label for="radius">Radius (km)</label>
+                <input
+                    id="radius"
+                    type="number"
+                    min="0.1"
+                    step="0.1"
+                    value="10"
+                >
+            </div>
+
+        </div>
+
+        <button id="searchButton" onclick="startSearch()">
+            Search Quarries
+        </button>
+    </section>
+
+
+    <section id="statusCard" class="card status">
+
+        <h2>Job status</h2>
+
+        <div id="statusText" class="status-text">
+            Queued
+        </div>
+
+        <div class="progress-container">
+            <div id="progressBar" class="progress-bar"></div>
+        </div>
+
+        <div id="jobId"></div>
+
+        <div id="jobError"></div>
+
+    </section>
+
+
+    <section class="card">
+
+        <div class="results-header">
+            <h2>Results</h2>
+            <span id="resultCount"></span>
+        </div>
+
+        <div id="results">
+            <div class="empty">
+                Run a search to discover quarry sites.
+            </div>
+        </div>
+
+    </section>
+
+</main>
+
+
+<script>
+
+let pollingTimer = null;
+
+
+async function startSearch() {
+
+    const button = document.getElementById("searchButton");
+
+    const latitude = Number(
+        document.getElementById("latitude").value
+    );
+
+    const longitude = Number(
+        document.getElementById("longitude").value
+    );
+
+    const radius = Number(
+        document.getElementById("radius").value
+    );
+
+    if (
+        !Number.isFinite(latitude) ||
+        !Number.isFinite(longitude) ||
+        !Number.isFinite(radius)
+    ) {
+        showError("Please enter valid search coordinates and radius.");
+        return;
+    }
+
+    button.disabled = true;
+
+    document.getElementById("statusCard")
+        .classList.add("visible");
+
+    document.getElementById("results").innerHTML = "";
+
+    document.getElementById("resultCount").textContent = "";
+
+    setStatus("Submitting job...", 0);
+
+    try {
+
+        const response = await fetch("/api/jobs", {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json"
+            },
+            body: JSON.stringify({
+                latitude: latitude,
+                longitude: longitude,
+                radius_km: radius
+            })
+        });
+
+        if (!response.ok) {
+            throw new Error(
+                `Job creation failed (${response.status})`
+            );
+        }
+
+        const job = await response.json();
+
+        document.getElementById("jobId").textContent =
+            `Job ID: ${job.job_id}`;
+
+        pollJob(job.job_id);
+
+    } catch (error) {
+
+        showError(error.message);
+        button.disabled = false;
+
+    }
+}
+
+
+async function pollJob(jobId) {
+
+    if (pollingTimer) {
+        clearTimeout(pollingTimer);
+    }
+
+    try {
+
+        const response = await fetch(
+            `/api/jobs/${jobId}`
+        );
+
+        if (!response.ok) {
+            throw new Error(
+                `Unable to retrieve job (${response.status})`
+            );
+        }
+
+        const job = await response.json();
+
+        const progress =
+            typeof job.progress === "number"
+                ? job.progress
+                : 0;
+
+        setStatus(
+            formatStatus(job.status),
+            progress
+        );
+
+        if (job.status === "completed") {
+
+            document.getElementById("searchButton")
+                .disabled = false;
+
+            renderResults(job.result);
+
+            return;
+        }
+
+        if (job.status === "failed") {
+
+            showError(
+                job.error || "The job failed."
+            );
+
+            document.getElementById("searchButton")
+                .disabled = false;
+
+            return;
+        }
+
+        pollingTimer = setTimeout(
+            () => pollJob(jobId),
+            1000
+        );
+
+    } catch (error) {
+
+        showError(error.message);
+
+        document.getElementById("searchButton")
+            .disabled = false;
+    }
+}
+
+
+function setStatus(status, progress) {
+
+    document.getElementById("statusText")
+        .textContent = status;
+
+    const percent = Math.max(
+        0,
+        Math.min(100, progress * 100)
+    );
+
+    document.getElementById("progressBar")
+        .style.width = `${percent}%`;
+
+    document.getElementById("jobError")
+        .innerHTML = "";
+}
+
+
+function formatStatus(status) {
+
+    const labels = {
+        queued: "Queued",
+        running: "Processing",
+        completed: "Completed",
+        failed: "Failed"
+    };
+
+    return labels[status] || status;
+}
+
+
+function renderResults(result) {
+
+    if (!result || !Array.isArray(result.results)) {
+        document.getElementById("results").innerHTML =
+            '<div class="empty">No results returned.</div>';
+
+        return;
+    }
+
+    document.getElementById("resultCount")
+        .textContent =
+        `${result.count} site(s)`;
+
+    if (result.results.length === 0) {
+
+        document.getElementById("results").innerHTML =
+            '<div class="empty">No quarries found.</div>';
+
+        return;
+    }
+
+    const container =
+        document.getElementById("results");
+
+    container.innerHTML = "";
+
+    result.results.forEach(item => {
+
+        const quarry = item.quarry;
+        const extraction = item.extraction;
+
+        const card = document.createElement("div");
+
+        card.className = "quarry";
+
+        const statusClass =
+            item.status === "extracted"
+                ? "extracted"
+                : item.status;
+
+        card.innerHTML = `
+            <h3>${escapeHtml(
+                quarry.name || "Unnamed Quarry"
+            )}</h3>
+
+            <span class="badge ${statusClass}">
+                ${escapeHtml(item.status)}
+            </span>
+
+            <div class="meta">
+                ${quarry.latitude.toFixed(5)},
+                ${quarry.longitude.toFixed(5)}
+                · ${quarry.distance_km} km away
+            </div>
+
+            ${
+                quarry.website
+                    ? `<div>
+                        Website:
+                        <a
+                            href="${escapeAttribute(quarry.website)}"
+                            target="_blank"
+                            rel="noopener"
+                        >
+                            ${escapeHtml(quarry.website)}
+                        </a>
+                    </div>`
+                    : ""
+            }
+
+            ${
+                extraction
+                    ? renderExtraction(extraction)
+                    : ""
+            }
+        `;
+
+        container.appendChild(card);
+    });
+}
+
+
+function renderExtraction(extraction) {
+
+    const fields = [
+        ["Official name", extraction.official_name],
+        ["Site type", extraction.site_type],
+        ["Description", extraction.description],
+        ["Operational status", extraction.operational_status]
+    ];
+
+    let html = '<div class="facts">';
+
+    fields.forEach(([label, field]) => {
+
+        if (!field) {
+            return;
+        }
+
+        const value =
+            field.value !== null &&
+            field.value !== undefined
+                ? field.value
+                : "Not established";
+
+        html += `
+            <div class="fact">
+                <strong>${escapeHtml(label)}</strong>
+                <div>${escapeHtml(
+                    Array.isArray(value)
+                        ? value.join(", ")
+                        : String(value)
+                )}</div>
+
+                <div class="confidence">
+                    Confidence:
+                    ${(Number(field.confidence || 0) * 100).toFixed(0)}%
+                </div>
+            </div>
+        `;
+    });
+
+    html += '</div>';
+
+    if (
+        Array.isArray(extraction.materials_produced) &&
+        extraction.materials_produced.length
+    ) {
+
+        html += `
+            <div class="fact" style="margin-top:12px">
+                <strong>Materials</strong>
+                ${extraction.materials_produced
+                    .map(item =>
+                        escapeHtml(String(
+                            item.value ?? "Not established"
+                        ))
+                    )
+                    .join(", ")}
+            </div>
+        `;
+    }
+
+    const evidence = collectEvidence(extraction);
+
+    if (evidence.length) {
+
+        html += '<div class="evidence">';
+
+        html += '<strong>Evidence</strong>';
+
+        evidence.forEach(item => {
+
+            html += `
+                <blockquote>
+                    "${escapeHtml(item.quote)}"
+                </blockquote>
+            `;
+        });
+
+        html += '</div>';
+    }
+
+    return html;
+}
+
+
+function collectEvidence(extraction) {
+
+    const evidence = [];
+
+    Object.values(extraction).forEach(field => {
+
+        if (!field || !Array.isArray(field.evidence)) {
+            return;
+        }
+
+        field.evidence.forEach(item => {
+
+            if (
+                item &&
+                item.quote &&
+                !evidence.some(
+                    existing =>
+                        existing.source_id === item.source_id &&
+                        existing.char_start === item.char_start &&
+                        existing.char_end === item.char_end
+                )
+            ) {
+                evidence.push(item);
+            }
+        });
+    });
+
+    return evidence;
+}
+
+
+function showError(message) {
+
+    document.getElementById("jobError")
+        .innerHTML = `
+            <div class="error">
+                ${escapeHtml(message)}
+            </div>
+        `;
+}
+
+
+function escapeHtml(value) {
+
+    return String(value)
+        .replaceAll("&", "&amp;")
+        .replaceAll("<", "&lt;")
+        .replaceAll(">", "&gt;")
+        .replaceAll('"', "&quot;")
+        .replaceAll("'", "&#039;");
+}
+
+
+function escapeAttribute(value) {
+    return escapeHtml(value);
+}
+
+</script>
+
+</body>
+</html>

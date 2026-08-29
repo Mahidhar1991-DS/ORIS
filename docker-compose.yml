@@ -1,0 +1,39 @@
+services:
+
+  oris:
+    build:
+      context: .
+      dockerfile: Dockerfile
+
+    container_name: oris
+
+    ports:
+      - "8001:8001"
+
+    env_file:
+      - .env
+
+    environment:
+      OPENAI_MODEL: ${OPENAI_MODEL:-gpt-5.4-mini}
+
+    volumes:
+      - oris_data:/data
+
+    restart: unless-stopped
+
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8001/api/health')"
+        ]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+
+
+volumes:
+  oris_data:

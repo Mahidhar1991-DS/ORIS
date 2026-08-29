@@ -7,215 +7,588 @@
     <title>ORIS — Quarry Intelligence</title>
 
     <style>
+        :root {
+            --text: #172033;
+            --muted: #667085;
+            --border: #dfe3ea;
+            --surface: #ffffff;
+            --background: #f6f7f9;
+            --primary: #2457d6;
+            --primary-dark: #1d46ae;
+            --success: #087443;
+            --success-bg: #ecfdf3;
+            --warning: #a15c00;
+            --warning-bg: #fff7e8;
+            --danger: #b42318;
+            --danger-bg: #fef3f2;
+        }
+
         * {
             box-sizing: border-box;
         }
 
         body {
             margin: 0;
-            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI",
-                Roboto, Helvetica, Arial, sans-serif;
-            background: #f5f7fa;
-            color: #172033;
+            background: var(--background);
+            color: var(--text);
+            font-family:
+                Inter,
+                -apple-system,
+                BlinkMacSystemFont,
+                "Segoe UI",
+                sans-serif;
+            line-height: 1.5;
         }
 
         header {
-            background: #172033;
+            background: var(--surface);
+            border-bottom: 1px solid var(--border);
+        }
+
+        .header-inner {
+            max-width: 1080px;
+            margin: 0 auto;
+            padding: 18px 24px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 20px;
+        }
+
+        .brand {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .brand-mark {
+            width: 38px;
+            height: 38px;
+            display: grid;
+            place-items: center;
+            border-radius: 9px;
+            background: var(--primary);
             color: white;
-            padding: 24px 32px;
+            font-size: 18px;
+            font-weight: 800;
         }
 
-        header h1 {
+        .brand h1 {
             margin: 0;
-            font-size: 28px;
+            font-size: 18px;
+            letter-spacing: -0.3px;
         }
 
-        header p {
-            margin: 6px 0 0;
-            opacity: 0.75;
+        .brand p {
+            margin: 1px 0 0;
+            color: var(--muted);
+            font-size: 12px;
+        }
+
+        .system-status {
+            display: flex;
+            align-items: center;
+            gap: 7px;
+            color: var(--muted);
+            font-size: 12px;
+        }
+
+        .status-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: var(--success);
         }
 
         main {
-            max-width: 1200px;
-            margin: 32px auto;
-            padding: 0 20px;
+            max-width: 1080px;
+            margin: 0 auto;
+            padding: 42px 24px 64px;
+        }
+
+        .intro {
+            margin-bottom: 28px;
+        }
+
+        .intro h2 {
+            margin: 0;
+            font-size: 30px;
+            line-height: 1.2;
+            letter-spacing: -0.7px;
+        }
+
+        .intro p {
+            max-width: 680px;
+            margin: 9px 0 0;
+            color: var(--muted);
+            font-size: 15px;
         }
 
         .card {
-            background: white;
+            background: var(--surface);
+            border: 1px solid var(--border);
             border-radius: 12px;
+            box-shadow: 0 2px 8px rgba(16, 24, 40, 0.04);
+        }
+
+        .search-card {
             padding: 24px;
-            margin-bottom: 24px;
-            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.06);
+        }
+
+        .section-header {
+            margin-bottom: 20px;
+        }
+
+        .section-header h3 {
+            margin: 0;
+            font-size: 16px;
+        }
+
+        .section-header p {
+            margin: 4px 0 0;
+            color: var(--muted);
+            font-size: 13px;
         }
 
         .search-grid {
             display: grid;
-            grid-template-columns: repeat(3, 1fr);
+            grid-template-columns: 1fr 1fr 1fr;
             gap: 16px;
         }
 
-        label {
+        .field label {
             display: block;
-            font-weight: 600;
-            margin-bottom: 6px;
+            margin-bottom: 7px;
+            color: #344054;
+            font-size: 12px;
+            font-weight: 650;
         }
 
-        input {
+        .field input {
             width: 100%;
-            padding: 11px 12px;
-            border: 1px solid #ccd3df;
-            border-radius: 7px;
-            font-size: 15px;
+            height: 42px;
+            padding: 0 12px;
+            border: 1px solid #cfd5df;
+            border-radius: 8px;
+            background: white;
+            color: var(--text);
+            font: inherit;
+            font-size: 14px;
+            outline: none;
+            transition:
+                border-color 0.15s ease,
+                box-shadow 0.15s ease;
+        }
+
+        .field input:focus {
+            border-color: var(--primary);
+            box-shadow: 0 0 0 3px rgba(36, 87, 214, 0.10);
+        }
+
+        .search-actions {
+            margin-top: 20px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 16px;
+        }
+
+        .search-hint {
+            color: var(--muted);
+            font-size: 12px;
         }
 
         button {
-            margin-top: 20px;
-            padding: 12px 20px;
-            border: none;
-            border-radius: 7px;
-            background: #2563eb;
+            height: 42px;
+            padding: 0 20px;
+            border: 0;
+            border-radius: 8px;
+            background: var(--primary);
             color: white;
-            font-size: 15px;
-            font-weight: 600;
+            font: inherit;
+            font-size: 13px;
+            font-weight: 700;
             cursor: pointer;
+            transition:
+                background 0.15s ease,
+                opacity 0.15s ease;
         }
 
         button:hover {
-            background: #1d4ed8;
+            background: var(--primary-dark);
         }
 
         button:disabled {
-            background: #9ca3af;
+            opacity: 0.55;
             cursor: not-allowed;
         }
 
         .status {
             display: none;
+            margin-top: 20px;
+            padding: 18px 20px;
         }
 
         .status.visible {
             display: block;
         }
 
-        .progress-container {
-            width: 100%;
-            height: 12px;
-            background: #e5e7eb;
-            border-radius: 20px;
-            overflow: hidden;
-            margin: 14px 0;
+        .status-top {
+            display: flex;
+            align-items: flex-start;
+            justify-content: space-between;
+            gap: 20px;
         }
 
-        .progress-bar {
-            height: 100%;
-            width: 0%;
-            background: #2563eb;
-            transition: width 0.4s ease;
+        .status-label {
+            color: var(--muted);
+            font-size: 11px;
+            font-weight: 700;
+            letter-spacing: 0.06em;
+            text-transform: uppercase;
         }
 
         .status-text {
-            font-weight: 600;
+            margin-top: 3px;
+            font-size: 15px;
+            font-weight: 700;
+        }
+
+        .job-id {
+            color: var(--muted);
+            font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+            font-size: 11px;
+            word-break: break-all;
+            text-align: right;
+        }
+
+        .progress-container {
+            height: 6px;
+            margin-top: 16px;
+            overflow: hidden;
+            border-radius: 999px;
+            background: #eaecf0;
+        }
+
+        .progress-bar {
+            width: 0%;
+            height: 100%;
+            border-radius: inherit;
+            background: var(--primary);
+            transition: width 0.25s ease;
+        }
+
+        .status-footer {
+            display: flex;
+            justify-content: space-between;
+            margin-top: 7px;
+            color: var(--muted);
+            font-size: 11px;
         }
 
         .error {
-            color: #b91c1c;
-            background: #fee2e2;
-            padding: 12px;
+            margin-top: 14px;
+            padding: 10px 12px;
+            border: 1px solid #fecdca;
             border-radius: 7px;
-            margin-top: 12px;
+            background: var(--danger-bg);
+            color: var(--danger);
+            font-size: 12px;
         }
 
-        .results-header {
+        .results-section {
+            margin-top: 30px;
+        }
+
+        .results-heading {
             display: flex;
+            align-items: baseline;
             justify-content: space-between;
-            align-items: center;
+            gap: 20px;
+            margin-bottom: 12px;
+        }
+
+        .results-heading h3 {
+            margin: 0;
+            font-size: 17px;
+        }
+
+        .result-count {
+            color: var(--muted);
+            font-size: 12px;
+        }
+
+        .empty {
+            padding: 42px 20px;
+            border: 1px dashed #cfd5df;
+            border-radius: 10px;
+            background: var(--surface);
+            color: var(--muted);
+            text-align: center;
+            font-size: 13px;
+        }
+
+        .empty strong {
+            display: block;
+            margin-bottom: 4px;
+            color: #344054;
+            font-size: 14px;
         }
 
         .quarry {
-            border: 1px solid #e1e5eb;
-            border-radius: 10px;
-            padding: 18px;
-            margin-top: 16px;
-        }
-
-        .quarry h3 {
-            margin: 0 0 8px;
-        }
-
-        .meta {
-            color: #667085;
-            font-size: 14px;
             margin-bottom: 12px;
+            padding: 20px;
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: 10px;
+        }
+
+        .quarry:last-child {
+            margin-bottom: 0;
+        }
+
+        .quarry-top {
+            display: flex;
+            align-items: flex-start;
+            justify-content: space-between;
+            gap: 16px;
+        }
+
+        .quarry h4 {
+            margin: 0;
+            font-size: 15px;
+        }
+
+        .location-line {
+            margin-top: 3px;
+            color: var(--muted);
+            font-size: 12px;
         }
 
         .badge {
-            display: inline-block;
-            padding: 4px 9px;
-            border-radius: 20px;
-            background: #e5e7eb;
-            font-size: 12px;
-            font-weight: 600;
-            margin-bottom: 12px;
+            flex-shrink: 0;
+            padding: 4px 8px;
+            border-radius: 999px;
+            background: #f2f4f7;
+            color: #475467;
+            font-size: 10px;
+            font-weight: 750;
+            text-transform: uppercase;
+            letter-spacing: 0.03em;
         }
 
         .badge.extracted {
-            background: #dcfce7;
-            color: #166534;
+            background: var(--success-bg);
+            color: var(--success);
         }
 
-        .badge.no-website,
-        .badge.crawl-failed {
-            background: #fef3c7;
-            color: #92400e;
+        .badge.no_website {
+            background: var(--warning-bg);
+            color: var(--warning);
+        }
+
+        .badge.http_403,
+        .badge.failed {
+            background: var(--danger-bg);
+            color: var(--danger);
+        }
+
+        .quarry-meta {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 7px;
+            margin-top: 15px;
+        }
+
+        .meta-pill {
+            padding: 5px 8px;
+            border: 1px solid #e4e7ec;
+            border-radius: 6px;
+            color: var(--muted);
+            font-size: 11px;
+        }
+
+        .meta-pill strong {
+            color: #475467;
+            font-weight: 650;
+        }
+
+        .website {
+            margin-top: 15px;
+            padding-top: 15px;
+            border-top: 1px solid #eaecf0;
+        }
+
+        .website-label {
+            display: block;
+            margin-bottom: 4px;
+            color: #475467;
+            font-size: 11px;
+            font-weight: 700;
+        }
+
+        .website a {
+            color: var(--primary);
+            font-size: 12px;
+            word-break: break-all;
+        }
+
+        .no-website-panel {
+            margin-top: 15px;
+            padding: 12px;
+            border: 1px dashed #d0d5dd;
+            border-radius: 8px;
+            background: #fafafa;
+        }
+
+        .no-website-title {
+            color: #344054;
+            font-size: 12px;
+            font-weight: 700;
+        }
+
+        .no-website-text {
+            margin-top: 3px;
+            color: var(--muted);
+            font-size: 11px;
+        }
+
+        .intelligence-section {
+            margin-top: 18px;
+            padding-top: 18px;
+            border-top: 1px solid #eaecf0;
+        }
+
+        .intelligence-heading {
+            margin-bottom: 12px;
+            color: #475467;
+            font-size: 11px;
+            font-weight: 750;
+            letter-spacing: 0.06em;
+            text-transform: uppercase;
         }
 
         .facts {
             display: grid;
             grid-template-columns: repeat(2, 1fr);
-            gap: 12px;
-            margin-top: 14px;
+            gap: 10px;
         }
 
         .fact {
-            background: #f8fafc;
             padding: 12px;
-            border-radius: 7px;
+            border: 1px solid #eaecf0;
+            border-radius: 8px;
         }
 
         .fact strong {
             display: block;
-            margin-bottom: 5px;
+            color: #475467;
+            font-size: 11px;
+        }
+
+        .fact-value {
+            margin-top: 4px;
+            font-size: 13px;
+            font-weight: 600;
         }
 
         .confidence {
-            color: #667085;
-            font-size: 12px;
+            margin-top: 4px;
+            color: var(--muted);
+            font-size: 10px;
+        }
+
+        .materials {
+            margin-top: 14px;
+        }
+
+        .materials-title {
+            margin-bottom: 7px;
+            color: #475467;
+            font-size: 11px;
+            font-weight: 700;
+        }
+
+        .material-list {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 6px;
+        }
+
+        .material {
+            padding: 4px 7px;
+            border-radius: 5px;
+            background: #f2f4f7;
+            color: #475467;
+            font-size: 10px;
         }
 
         .evidence {
-            margin-top: 16px;
-            padding: 14px;
-            background: #fff7ed;
-            border-left: 4px solid #f97316;
-            border-radius: 5px;
+            margin-top: 14px;
         }
 
-        .evidence blockquote {
-            margin: 6px 0 0;
-            font-style: italic;
+        .evidence-header {
+            margin-bottom: 7px;
+            color: #475467;
+            font-size: 11px;
+            font-weight: 700;
         }
 
-        .empty {
-            color: #667085;
-            text-align: center;
-            padding: 30px;
+        blockquote {
+            margin: 6px 0;
+            padding: 9px 11px;
+            border-left: 3px solid #cfd8ee;
+            background: #f8f9fb;
+            color: #475467;
+            font-size: 11px;
+        }
+
+        footer {
+            max-width: 1080px;
+            margin: 0 auto;
+            padding: 0 24px 30px;
+            color: var(--muted);
+            font-size: 11px;
         }
 
         @media (max-width: 700px) {
-            .search-grid,
+            .header-inner {
+                padding: 15px 18px;
+            }
+
+            main {
+                padding: 30px 18px 50px;
+            }
+
+            .search-grid {
+                grid-template-columns: 1fr;
+            }
+
+            .search-actions {
+                align-items: stretch;
+                flex-direction: column;
+            }
+
+            button {
+                width: 100%;
+            }
+
+            .status-top,
+            .quarry-top,
+            .results-heading {
+                flex-direction: column;
+            }
+
+            .job-id {
+                text-align: left;
+            }
+
             .facts {
                 grid-template-columns: 1fr;
+            }
+
+            .intro h2 {
+                font-size: 25px;
             }
         }
     </style>
@@ -224,18 +597,45 @@
 <body>
 
 <header>
-    <h1>ORIS</h1>
-    <p>Quarry Intelligence &amp; Research System</p>
+    <div class="header-inner">
+        <div class="brand">
+            <div class="brand-mark">O</div>
+            <div>
+                <h1>ORIS</h1>
+                <p>Quarry Intelligence &amp; Research System</p>
+            </div>
+        </div>
+
+        <div class="system-status">
+            <span class="status-dot"></span>
+            System ready
+        </div>
+    </div>
 </header>
 
 <main>
 
-    <section class="card">
-        <h2>Search for quarries</h2>
+    <section class="intro">
+        <h2>Quarry discovery and intelligence</h2>
+        <p>
+            Discover quarry sites within a geographic area, establish
+            official sources, and extract structured information with
+            supporting evidence.
+        </p>
+    </section>
+
+    <section class="card search-card">
+
+        <div class="section-header">
+            <h3>Search area</h3>
+            <p>
+                Enter coordinates and a radius to start the ORIS pipeline.
+            </p>
+        </div>
 
         <div class="search-grid">
 
-            <div>
+            <div class="field">
                 <label for="latitude">Latitude</label>
                 <input
                     id="latitude"
@@ -245,7 +645,7 @@
                 >
             </div>
 
-            <div>
+            <div class="field">
                 <label for="longitude">Longitude</label>
                 <input
                     id="longitude"
@@ -255,53 +655,70 @@
                 >
             </div>
 
-            <div>
+            <div class="field">
                 <label for="radius">Radius (km)</label>
                 <input
                     id="radius"
                     type="number"
                     min="0.1"
                     step="0.1"
-                    value="10"
+                    value="5"
                 >
             </div>
 
         </div>
 
-        <button id="searchButton" onclick="startSearch()">
-            Search Quarries
-        </button>
-    </section>
+        <div class="search-actions">
+            <div class="search-hint">
+                Use decimal-degree coordinates.
+            </div>
 
+            <button
+                id="searchButton"
+                onclick="startSearch()"
+            >
+                Search quarries
+            </button>
+        </div>
+
+    </section>
 
     <section id="statusCard" class="card status">
 
-        <h2>Job status</h2>
+        <div class="status-top">
+            <div>
+                <div class="status-label">Job status</div>
+                <div id="statusText" class="status-text">
+                    Queued
+                </div>
+            </div>
 
-        <div id="statusText" class="status-text">
-            Queued
+            <div id="jobId" class="job-id"></div>
         </div>
 
         <div class="progress-container">
             <div id="progressBar" class="progress-bar"></div>
         </div>
 
-        <div id="jobId"></div>
+        <div class="status-footer">
+            <span>ORIS pipeline</span>
+            <span id="progressPercent">0%</span>
+        </div>
 
         <div id="jobError"></div>
 
     </section>
 
+    <section class="results-section">
 
-    <section class="card">
-
-        <div class="results-header">
-            <h2>Results</h2>
-            <span id="resultCount"></span>
+        <div class="results-heading">
+            <h3>Results</h3>
+            <span id="resultCount" class="result-count"></span>
         </div>
 
         <div id="results">
             <div class="empty">
+                <strong>No search results yet</strong>
                 Run a search to discover quarry sites.
             </div>
         </div>
@@ -310,6 +727,9 @@
 
 </main>
 
+<footer>
+    ORIS · Quarry discovery, source verification and structured extraction
+</footer>
 
 <script>
 
@@ -318,7 +738,8 @@ let pollingTimer = null;
 
 async function startSearch() {
 
-    const button = document.getElementById("searchButton");
+    const button =
+        document.getElementById("searchButton");
 
     const latitude = Number(
         document.getElementById("latitude").value
@@ -335,18 +756,40 @@ async function startSearch() {
     if (
         !Number.isFinite(latitude) ||
         !Number.isFinite(longitude) ||
-        !Number.isFinite(radius)
+        !Number.isFinite(radius) ||
+        radius <= 0
     ) {
-        showError("Please enter valid search coordinates and radius.");
+        showError(
+            "Please enter valid coordinates and a positive radius."
+        );
+        return;
+    }
+
+    if (
+        latitude < -90 ||
+        latitude > 90 ||
+        longitude < -180 ||
+        longitude > 180
+    ) {
+        showError(
+            "Latitude must be between -90 and 90 and longitude between -180 and 180."
+        );
         return;
     }
 
     button.disabled = true;
+    button.textContent = "Searching...";
 
-    document.getElementById("statusCard")
+    document
+        .getElementById("statusCard")
         .classList.add("visible");
 
-    document.getElementById("results").innerHTML = "";
+    document.getElementById("results").innerHTML = `
+        <div class="empty">
+            <strong>Searching for quarry sites...</strong>
+            ORIS is processing the requested area.
+        </div>
+    `;
 
     document.getElementById("resultCount").textContent = "";
 
@@ -354,17 +797,20 @@ async function startSearch() {
 
     try {
 
-        const response = await fetch("/api/jobs", {
-            method: "POST",
-            headers: {
-                "Content-Type": "application/json"
-            },
-            body: JSON.stringify({
-                latitude: latitude,
-                longitude: longitude,
-                radius_km: radius
-            })
-        });
+        const response = await fetch(
+            "/api/jobs",
+            {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json"
+                },
+                body: JSON.stringify({
+                    latitude: latitude,
+                    longitude: longitude,
+                    radius_km: radius
+                })
+            }
+        );
 
         if (!response.ok) {
             throw new Error(
@@ -382,8 +828,9 @@ async function startSearch() {
     } catch (error) {
 
         showError(error.message);
-        button.disabled = false;
 
+        button.disabled = false;
+        button.textContent = "Search quarries";
     }
 }
 
@@ -423,6 +870,9 @@ async function pollJob(jobId) {
             document.getElementById("searchButton")
                 .disabled = false;
 
+            document.getElementById("searchButton")
+                .textContent = "Search again";
+
             renderResults(job.result);
 
             return;
@@ -436,6 +886,9 @@ async function pollJob(jobId) {
 
             document.getElementById("searchButton")
                 .disabled = false;
+
+            document.getElementById("searchButton")
+                .textContent = "Try again";
 
             return;
         }
@@ -451,6 +904,9 @@ async function pollJob(jobId) {
 
         document.getElementById("searchButton")
             .disabled = false;
+
+        document.getElementById("searchButton")
+            .textContent = "Try again";
     }
 }
 
@@ -467,6 +923,9 @@ function setStatus(status, progress) {
 
     document.getElementById("progressBar")
         .style.width = `${percent}%`;
+
+    document.getElementById("progressPercent")
+        .textContent = `${Math.round(percent)}%`;
 
     document.getElementById("jobError")
         .innerHTML = "";
@@ -488,21 +947,33 @@ function formatStatus(status) {
 
 function renderResults(result) {
 
-    if (!result || !Array.isArray(result.results)) {
-        document.getElementById("results").innerHTML =
-            '<div class="empty">No results returned.</div>';
+    if (
+        !result ||
+        !Array.isArray(result.results)
+    ) {
+
+        document.getElementById("results").innerHTML = `
+            <div class="empty">
+                <strong>No results returned</strong>
+                The job completed without result data.
+            </div>
+        `;
 
         return;
     }
 
     document.getElementById("resultCount")
         .textContent =
-        `${result.count} site(s)`;
+        `${result.count} site${result.count === 1 ? "" : "s"}`;
 
     if (result.results.length === 0) {
 
-        document.getElementById("results").innerHTML =
-            '<div class="empty">No quarries found.</div>';
+        document.getElementById("results").innerHTML = `
+            <div class="empty">
+                <strong>No quarries found</strong>
+                Try increasing the search radius.
+            </div>
+        `;
 
         return;
     }
@@ -517,7 +988,8 @@ function renderResults(result) {
         const quarry = item.quarry;
         const extraction = item.extraction;
 
-        const card = document.createElement("div");
+        const card =
+            document.createElement("article");
 
         card.className = "quarry";
 
@@ -527,33 +999,83 @@ function renderResults(result) {
                 : item.status;
 
         card.innerHTML = `
-            <h3>${escapeHtml(
-                quarry.name || "Unnamed Quarry"
-            )}</h3>
 
-            <span class="badge ${statusClass}">
-                ${escapeHtml(item.status)}
-            </span>
+            <div class="quarry-top">
 
-            <div class="meta">
-                ${quarry.latitude.toFixed(5)},
-                ${quarry.longitude.toFixed(5)}
-                · ${quarry.distance_km} km away
+                <div>
+                    <h4>
+                        ${escapeHtml(
+                            quarry.name || "Unnamed Quarry"
+                        )}
+                    </h4>
+
+                    <div class="location-line">
+                        ${escapeHtml(
+                            quarry.municipality ||
+                            "Municipality not established"
+                        )}
+                    </div>
+                </div>
+
+                <span class="badge ${escapeHtml(statusClass)}">
+                    ${escapeHtml(item.status)}
+                </span>
+
+            </div>
+
+            <div class="quarry-meta">
+
+                <span class="meta-pill">
+                    <strong>Coordinates:</strong>
+                    ${Number(quarry.latitude).toFixed(5)},
+                    ${Number(quarry.longitude).toFixed(5)}
+                </span>
+
+                <span class="meta-pill">
+                    <strong>Distance:</strong>
+                    ${escapeHtml(quarry.distance_km)} km
+                </span>
+
+                <span class="meta-pill">
+                    <strong>Source:</strong>
+                    ${escapeHtml(
+                        quarry.source || "OpenStreetMap"
+                    )}
+                </span>
+
             </div>
 
             ${
                 quarry.website
-                    ? `<div>
-                        Website:
-                        <a
-                            href="${escapeAttribute(quarry.website)}"
-                            target="_blank"
-                            rel="noopener"
-                        >
-                            ${escapeHtml(quarry.website)}
-                        </a>
-                    </div>`
-                    : ""
+                    ? `
+                        <div class="website">
+                            <span class="website-label">
+                                Official website
+                            </span>
+
+                            <a
+                                href="${escapeAttribute(
+                                    quarry.website
+                                )}"
+                                target="_blank"
+                                rel="noopener noreferrer"
+                            >
+                                ${escapeHtml(quarry.website)}
+                            </a>
+                        </div>
+                    `
+                    : `
+                        <div class="no-website-panel">
+                            <div class="no-website-title">
+                                Official website not established
+                            </div>
+
+                            <div class="no-website-text">
+                                ORIS could not confidently establish
+                                an official website for this site.
+                            </div>
+                        </div>
+                    `
             }
 
             ${
@@ -561,6 +1083,7 @@ function renderResults(result) {
                     ? renderExtraction(extraction)
                     : ""
             }
+
         `;
 
         container.appendChild(card);
@@ -577,7 +1100,14 @@ function renderExtraction(extraction) {
         ["Operational status", extraction.operational_status]
     ];
 
-    let html = '<div class="facts">';
+    let html = `
+        <div class="intelligence-section">
+            <div class="intelligence-heading">
+                Structured extraction
+            </div>
+
+            <div class="facts">
+    `;
 
     fields.forEach(([label, field]) => {
 
@@ -593,49 +1123,87 @@ function renderExtraction(extraction) {
 
         html += `
             <div class="fact">
-                <strong>${escapeHtml(label)}</strong>
-                <div>${escapeHtml(
-                    Array.isArray(value)
-                        ? value.join(", ")
-                        : String(value)
-                )}</div>
+
+                <strong>
+                    ${escapeHtml(label)}
+                </strong>
+
+                <div class="fact-value">
+                    ${escapeHtml(
+                        Array.isArray(value)
+                            ? value.join(", ")
+                            : String(value)
+                    )}
+                </div>
 
                 <div class="confidence">
                     Confidence:
-                    ${(Number(field.confidence || 0) * 100).toFixed(0)}%
+                    ${(Number(
+                        field.confidence || 0
+                    ) * 100).toFixed(0)}%
                 </div>
+
             </div>
         `;
     });
 
-    html += '</div>';
+    html += `
+            </div>
+        </div>
+    `;
+
 
     if (
-        Array.isArray(extraction.materials_produced) &&
+        Array.isArray(
+            extraction.materials_produced
+        ) &&
         extraction.materials_produced.length
     ) {
 
+        const materials =
+            extraction.materials_produced
+                .map(item => {
+
+                    const value =
+                        item.value ??
+                        "Not established";
+
+                    return `
+                        <span class="material">
+                            ${escapeHtml(String(value))}
+                        </span>
+                    `;
+                })
+                .join("");
+
         html += `
-            <div class="fact" style="margin-top:12px">
-                <strong>Materials</strong>
-                ${extraction.materials_produced
-                    .map(item =>
-                        escapeHtml(String(
-                            item.value ?? "Not established"
-                        ))
-                    )
-                    .join(", ")}
+            <div class="materials">
+
+                <div class="materials-title">
+                    Materials produced
+                </div>
+
+                <div class="material-list">
+                    ${materials}
+                </div>
+
             </div>
         `;
     }
 
-    const evidence = collectEvidence(extraction);
+
+    const evidence =
+        collectEvidence(extraction);
 
     if (evidence.length) {
 
-        html += '<div class="evidence">';
+        html += `
+            <div class="evidence">
 
-        html += '<strong>Evidence</strong>';
+                <div class="evidence-header">
+                    Evidence
+                </div>
+        `;
 
         evidence.forEach(item => {
 
@@ -646,7 +1214,7 @@ function renderExtraction(extraction) {
             `;
         });
 
-        html += '</div>';
+        html += "</div>";
     }
 
     return html;
@@ -657,28 +1225,35 @@ function collectEvidence(extraction) {
 
     const evidence = [];
 
-    Object.values(extraction).forEach(field => {
-
-        if (!field || !Array.isArray(field.evidence)) {
-            return;
-        }
-
-        field.evidence.forEach(item => {
+    Object.values(extraction)
+        .forEach(field => {
 
             if (
-                item &&
-                item.quote &&
-                !evidence.some(
-                    existing =>
-                        existing.source_id === item.source_id &&
-                        existing.char_start === item.char_start &&
-                        existing.char_end === item.char_end
-                )
+                !field ||
+                !Array.isArray(field.evidence)
             ) {
-                evidence.push(item);
+                return;
             }
+
+            field.evidence.forEach(item => {
+
+                if (
+                    item &&
+                    item.quote &&
+                    !evidence.some(
+                        existing =>
+                            existing.source_id ===
+                                item.source_id &&
+                            existing.char_start ===
+                                item.char_start &&
+                            existing.char_end ===
+                                item.char_end
+                    )
+                ) {
+                    evidence.push(item);
+                }
+            });
         });
-    });
 
     return evidence;
 }
