@@ -76,11 +76,159 @@ class FakeClient:
             self.response_data
         )
 
+    async def get(
+        self,
+        *args,
+        **kwargs,
+    ):
+        return FakeResponse(
+            {
+                "address": {
+                    "town": "Paris",
+                }
+            }
+        )
+
 
 # ============================================================
 # DISCOVERY TESTS
 # ============================================================
 
+@pytest.mark.asyncio
+async def test_reverse_geocode_success(monkeypatch):
+    from app import geocoding
+
+    class FakeResponse:
+        def raise_for_status(self):
+            pass
+
+        def json(self):
+            return {
+                "address": {
+                    "town": "Cormeilles-en-Parisis",
+                    "municipality": "Argenteuil",
+                }
+            }
+
+    class FakeClient:
+        def __init__(self, *args, **kwargs):
+            pass
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(
+            self,
+            exc_type,
+            exc,
+            tb,
+        ):
+            pass
+
+        async def get(
+            self,
+            *args,
+            **kwargs,
+        ):
+            return FakeResponse()
+
+    geocoding.clear_cache()
+
+    monkeypatch.setattr(
+        "app.geocoding.httpx.AsyncClient",
+        FakeClient,
+    )
+
+    result = await geocoding.reverse_geocode(
+        48.9702088,
+        2.2186234,
+    )
+
+    assert result == "Cormeilles-en-Parisis"
+
+@pytest.mark.asyncio
+async def test_reverse_geocode_failure_returns_none(
+    monkeypatch,
+):
+    from app import geocoding
+
+    class FakeClient:
+        def __init__(self, *args, **kwargs):
+            pass
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(
+            self,
+            exc_type,
+            exc,
+            tb,
+        ):
+            pass
+
+        async def get(
+            self,
+            *args,
+            **kwargs,
+        ):
+            raise httpx.ConnectError(
+                "Nominatim unavailable"
+            )
+
+    geocoding.clear_cache()
+
+    monkeypatch.setattr(
+        "app.geocoding.httpx.AsyncClient",
+        FakeClient,
+    )
+
+    result = await geocoding.reverse_geocode(
+        48.9702088,
+        2.2186234,
+    )
+
+    assert result is None
+
+
+@pytest.mark.asyncio
+async def test_quarry_municipality_enrichment(
+    monkeypatch,
+):
+    from app.discovery import (
+        enrich_quarry_municipalities,
+    )
+
+    async def fake_reverse_geocode(
+        latitude,
+        longitude,
+    ):
+        return "Cormeilles-en-Parisis"
+
+    monkeypatch.setattr(
+        "app.discovery.reverse_geocode",
+        fake_reverse_geocode,
+    )
+
+    quarry = Quarry(
+        site_id="test-quarry",
+        name="Carrière Lambert",
+        municipality=None,
+        latitude=48.9702088,
+        longitude=2.2186234,
+        distance_km=15.965,
+        website=None,
+    )
+
+    result = await enrich_quarry_municipalities(
+        [quarry]
+    )
+
+    assert len(result) == 1
+    assert (
+        result[0].municipality
+        == "Cormeilles-en-Parisis"
+    )
 
 @pytest.mark.asyncio
 async def test_discover_node_quarry(monkeypatch):
@@ -113,6 +261,8 @@ async def test_discover_node_quarry(monkeypatch):
     assert len(result) == 1
     assert result[0].name == "Test Quarry"
     assert result[0].website == "https://example.com"
+    assert result[0].municipality == "Paris"
+
 @pytest.mark.asyncio
 async def test_discover_uses_second_overpass_endpoint(
     monkeypatch,
@@ -145,9 +295,20 @@ async def test_discover_uses_second_overpass_endpoint(
             ]
         }
 
+    async def fake_reverse_geocode(
+        latitude,
+        longitude,
+    ):
+        return "Paris"
+
     monkeypatch.setattr(
         "app.discovery._query_overpass",
         fake_query,
+    )
+
+    monkeypatch.setattr(
+        "app.discovery.reverse_geocode",
+        fake_reverse_geocode,
     )
 
     result = await discover_quarries(
@@ -158,8 +319,8 @@ async def test_discover_uses_second_overpass_endpoint(
 
     assert len(calls) == 2
     assert result[0].name == "Fallback Quarry"
-
-
+    assert result[0].municipality == "Paris"
+    
 @pytest.mark.asyncio
 async def test_discover_returns_empty_when_provider_succeeds(
     monkeypatch,

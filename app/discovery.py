@@ -1,5 +1,6 @@
 import httpx
 
+from app.geocoding import reverse_geocode
 from app.models import Quarry
 from app.utils import haversine_distance_km, stable_id
 
@@ -150,6 +151,30 @@ def _parse_quarries(
 
     return quarries
 
+async def enrich_quarry_municipalities(
+    quarries: list[Quarry],
+) -> list[Quarry]:
+    """
+    Enrich quarry records with municipality information.
+
+    Geocoding is performed sequentially and is best-effort.
+    A geocoding failure never removes a quarry from discovery.
+    """
+
+    for quarry in quarries:
+
+        if quarry.municipality:
+            continue
+
+        municipality = await reverse_geocode(
+            latitude=quarry.latitude,
+            longitude=quarry.longitude,
+        )
+
+        if municipality:
+            quarry.municipality = municipality
+
+    return quarries
 
 async def discover_quarries(
     latitude: float,
@@ -222,7 +247,23 @@ async def discover_quarries(
                     flush=True,
                 )
 
-                return quarries
+                print(
+    "ENRICHING MUNICIPALITIES...",
+    flush=True,
+)
+
+                quarries = await enrich_quarry_municipalities(
+                    quarries
+)
+
+                print(
+                    "MUNICIPALITY ENRICHMENT COMPLETE",
+                    flush=True,
+                )
+
+                return quarries 
+
+                
 
             except httpx.HTTPStatusError as exc:
                 last_error = exc
