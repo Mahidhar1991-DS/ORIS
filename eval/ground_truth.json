@@ -1,0 +1,18 @@
+[
+  {
+    "site_id": "tersen-test",
+    "source_url": "https://www.tersen-env.com/actualites/notre-site-tersen-le-deluge-a-ouvert-ses-portes/",
+    "expected": {
+      "official_name": "Tersen Le Déluge",
+      "site_type": null,
+      "description": "carrière du Déluge à Marcoussis (91)",
+      "materials_produced": [],
+      "certifications": [],
+      "operational_status": null,
+      "location_verification": {
+        "is_verified": true,
+        "extracted_city": "Marcoussis"
+      }
+    }
+  }
+]

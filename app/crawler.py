@@ -1,20 +1,58 @@
+from dataclasses import dataclass
 import ipaddress
 import socket
 from urllib.parse import urlparse
 from urllib.robotparser import RobotFileParser
 
-import fitz
 import httpx
+import pymupdf
 from bs4 import BeautifulSoup
 
 
-USER_AGENT = "ORIS-QuarryResearch/1.0"
+USER_AGENT = (
+    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
+    "AppleWebKit/537.36 (KHTML, like Gecko) "
+    "Chrome/131.0.0.0 Safari/537.36 "
+    "ORIS-QuarryResearch/1.0"
+)
+
 MAX_CONTENT_SIZE = 2_000_000
+
+DEFAULT_HEADERS = {
+    "User-Agent": USER_AGENT,
+    "Accept": (
+        "text/html,"
+        "application/xhtml+xml,"
+        "application/xml;q=0.9,"
+        "image/avif,"
+        "image/webp,"
+        "*/*;q=0.8"
+    ),
+    "Accept-Language": (
+        "fr-FR,fr;q=0.9,"
+        "en-US;q=0.8,en;q=0.7"
+    ),
+    "Accept-Encoding": "gzip, deflate, br",
+    "Connection": "keep-alive",
+}
+
+
+@dataclass
+class CrawlResult:
+    status: str
+    text: str | None = None
 
 
 def validate_url(url: str) -> bool:
     """Validate URL and reject unsafe/private destinations."""
-    parsed = urlparse(url)
+
+    if not url:
+        return False
+
+    try:
+        parsed = urlparse(url)
+    except ValueError:
+        return False
 
     if parsed.scheme not in {"http", "https"}:
         return False
@@ -29,7 +67,9 @@ def validate_url(url: str) -> bool:
         )
 
         for address in addresses:
-            ip = ipaddress.ip_address(address[4][0])
+            ip = ipaddress.ip_address(
+                address[4][0]
+            )
 
             if (
                 ip.is_private
@@ -40,26 +80,38 @@ def validate_url(url: str) -> bool:
             ):
                 return False
 
-    except socket.gaierror:
+    except (
+        socket.gaierror,
+        ValueError,
+    ):
         return False
 
     return True
 
 
-async def allowed_by_robots(url: str) -> bool:
+async def allowed_by_robots(
+    url: str,
+) -> bool:
     """Check whether our crawler is allowed to access the URL."""
+
     parsed = urlparse(url)
 
-    robots_url = f"{parsed.scheme}://{parsed.netloc}/robots.txt"
+    robots_url = (
+        f"{parsed.scheme}://"
+        f"{parsed.netloc}/robots.txt"
+    )
 
     parser = RobotFileParser()
     parser.set_url(robots_url)
 
     try:
-        async with httpx.AsyncClient(timeout=10) as client:
+        async with httpx.AsyncClient(
+            timeout=10,
+            follow_redirects=True,
+        ) as client:
             response = await client.get(
                 robots_url,
-                headers={"User-Agent": USER_AGENT},
+                headers=DEFAULT_HEADERS,
             )
 
         if response.status_code == 404:
@@ -68,78 +120,231 @@ async def allowed_by_robots(url: str) -> bool:
         if response.status_code >= 400:
             return False
 
-        parser.parse(response.text.splitlines())
+        parser.parse(
+            response.text.splitlines()
+        )
 
-        return parser.can_fetch(USER_AGENT, url)
+        return parser.can_fetch(
+            USER_AGENT,
+            url,
+        )
 
-    except httpx.HTTPError:
+    except (
+        httpx.HTTPError,
+        ValueError,
+    ):
         return False
 
 
-def html_to_text(html: str) -> str:
-    """Convert HTML into clean text."""
-    soup = BeautifulSoup(html, "html.parser")
+def html_to_text(
+    html: str,
+) -> str:
+    """Convert HTML into clean readable text."""
 
-    for element in soup(["script", "style", "noscript"]):
+    soup = BeautifulSoup(
+        html,
+        "html.parser",
+    )
+
+    for element in soup(
+        [
+            "script",
+            "style",
+            "noscript",
+            "svg",
+            "iframe",
+        ]
+    ):
         element.decompose()
 
-    return " ".join(soup.stripped_strings)
+    return " ".join(
+        soup.stripped_strings
+    )
 
 
-def pdf_to_text(content: bytes) -> str:
-    """Extract text from a PDF."""
-    document = fitz.open(
+def pdf_to_text(
+    content: bytes,
+) -> str:
+    """Extract text from PDF content."""
+
+    document = pymupdf.open(
         stream=content,
         filetype="pdf",
     )
 
     pages = []
 
-    for page in document:
-        pages.append(page.get_text())
+    try:
+        for page in document:
+            pages.append(
+                page.get_text()
+            )
+    finally:
+        document.close()
 
-    document.close()
+    return "\n".join(
+        pages
+    ).strip()
 
-    return "\n".join(pages).strip()
 
-
-async def crawl(url: str) -> str | None:
-    """Fetch a public HTML/PDF page and return its text."""
+async def crawl_with_status(
+    url: str,
+) -> CrawlResult:
+    """
+    Crawl a public HTML/PDF page and return
+    content together with a machine-readable status.
+    """
 
     if not validate_url(url):
-        return None
+        return CrawlResult(
+            status="invalid_url",
+            text=None,
+        )
 
     if not await allowed_by_robots(url):
-        return None
+        return CrawlResult(
+            status="robots_blocked",
+            text=None,
+        )
 
     try:
         async with httpx.AsyncClient(
             timeout=20,
-            follow_redirects=False,
+            follow_redirects=True,
+            headers=DEFAULT_HEADERS,
         ) as client:
-            response = await client.get(
-                url,
-                headers={"User-Agent": USER_AGENT},
+            response = await client.get(url)
+
+    except (
+        httpx.ConnectError,
+        httpx.ConnectTimeout,
+        httpx.ReadTimeout,
+        httpx.RemoteProtocolError,
+        httpx.NetworkError,
+    ):
+        return CrawlResult(
+            status="network_error",
+            text=None,
+        )
+
+    except (
+        httpx.HTTPError,
+        ValueError,
+    ):
+        return CrawlResult(
+            status="http_error",
+            text=None,
+        )
+
+    final_url = str(response.url)
+
+    if not validate_url(final_url):
+        return CrawlResult(
+            status="invalid_redirect",
+            text=None,
+        )
+
+    if response.status_code == 403:
+        return CrawlResult(
+            status="http_403",
+            text=None,
+        )
+
+    if response.status_code == 404:
+        return CrawlResult(
+            status="http_404",
+            text=None,
+        )
+
+    if response.status_code == 429:
+        return CrawlResult(
+            status="http_429",
+            text=None,
+        )
+
+    if response.status_code >= 500:
+        return CrawlResult(
+            status=f"http_{response.status_code}",
+            text=None,
+        )
+
+    if response.status_code != 200:
+        return CrawlResult(
+            status=f"http_{response.status_code}",
+            text=None,
+        )
+
+    if len(response.content) > MAX_CONTENT_SIZE:
+        return CrawlResult(
+            status="too_large",
+            text=None,
+        )
+
+    content_type = response.headers.get(
+        "content-type",
+        "",
+    ).lower()
+
+    if "text/html" in content_type:
+        text = html_to_text(
+            response.text
+        )
+
+        if not text:
+            return CrawlResult(
+                status="empty_content",
+                text=None,
             )
 
-        if response.status_code != 200:
-            return None
+        return CrawlResult(
+            status="success",
+            text=text,
+        )
 
-        if len(response.content) > MAX_CONTENT_SIZE:
-            return None
+    if (
+        "application/pdf" in content_type
+        or "application/x-pdf" in content_type
+    ):
+        try:
+            text = pdf_to_text(
+                response.content
+            )
+        except Exception:
+            return CrawlResult(
+                status="pdf_parse_error",
+                text=None,
+            )
 
-        content_type = response.headers.get(
-            "content-type",
-            "",
-        ).lower()
+        if not text:
+            return CrawlResult(
+                status="empty_content",
+                text=None,
+            )
 
-        if "text/html" in content_type:
-            return html_to_text(response.text)
+        return CrawlResult(
+            status="success",
+            text=text,
+        )
 
-        if "application/pdf" in content_type:
-            return pdf_to_text(response.content)
+    return CrawlResult(
+        status="unsupported_content_type",
+        text=None,
+    )
 
+
+async def crawl(
+    url: str,
+) -> str | None:
+    """
+    Backwards-compatible crawler.
+
+    The ORIS pipeline expects str | None,
+    so this wraps crawl_with_status().
+    """
+
+    result = await crawl_with_status(url)
+
+    if result.status != "success":
         return None
 
-    except (httpx.HTTPError, ValueError):
-        return None
+    return result.text

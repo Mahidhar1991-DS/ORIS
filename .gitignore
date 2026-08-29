@@ -1,0 +1,17 @@
+.env
+.env.*
+!.env.example
+
+__pycache__/
+*.py[cod]
+
+.pytest_cache/
+
+*.db
+*.sqlite
+*.sqlite3
+
+.DS_Store
+
+eval/__pycache__/
+eval/*_result.json

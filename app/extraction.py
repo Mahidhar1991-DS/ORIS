@@ -1,10 +1,18 @@
 import json
 import os
 
+from dotenv import load_dotenv
 from openai import AsyncOpenAI
 
-from app.models import Document, Evidence, ExtractionResult, FieldValue
+from app.models import (
+    Document,
+    Evidence,
+    ExtractionResult,
+    FieldValue,
+    LocationVerification,
+)
 
+load_dotenv(".env")
 
 SYSTEM_PROMPT = """
 You extract factual information from quarry documents.
@@ -16,30 +24,51 @@ Rules:
 4. If a value cannot be established, return null.
 5. Keep quotes short and copy them exactly.
 6. Do not generate character offsets.
+7. site_type must be "Quarry" when explicitly supported, otherwise null.
+8. operational_status must be supported by recent evidence. If unclear, return null.
+9. For arrays, return an empty array when no value is supported.
+10. location_verification must use one of:
+    "string_match", "geocode", "llm_inference", "none".
 
 Return JSON with these fields:
 
 {
-  "name": {
-    "value": "...",
+  "official_name": {
+    "value": null,
     "confidence": 0.0,
-    "quote": "..."
+    "quote": null
   },
-  "material": {
-    "value": "...",
+  "site_type": {
+    "value": null,
     "confidence": 0.0,
-    "quote": "..."
+    "quote": null
   },
-  "operator": {
-    "value": "...",
+  "description": {
+    "value": null,
     "confidence": 0.0,
-    "quote": "..."
+    "quote": null
   },
+  "materials_produced": [],
+  "certifications": [],
   "operational_status": {
-    "value": "...",
+    "value": null,
     "confidence": 0.0,
-    "quote": "..."
+    "quote": null
+  },
+  "location_verification": {
+    "is_verified": false,
+    "confidence": 0.0,
+    "extracted_city": null,
+    "method": "none"
   }
+}
+
+Each array item must have:
+
+{
+  "value": "...",
+  "confidence": 0.0,
+  "quote": "..."
 }
 """
 
@@ -97,7 +126,7 @@ def create_field(
             abstain_reason="evidence_not_found",
         )
 
-    if value.lower() not in quote.lower():
+    if str(value).lower() not in quote.lower():
         return FieldValue(
             value=None,
             confidence=0.0,
@@ -109,6 +138,7 @@ def create_field(
         confidence=confidence,
         evidence=[evidence],
     )
+
 
 def _field_from_response(
     document: Document,
@@ -122,6 +152,25 @@ def _field_from_response(
     )
 
 
+def _list_from_response(
+    document: Document,
+    data: list,
+) -> list[FieldValue]:
+    return [
+        _field_from_response(document, item)
+        for item in data
+        if isinstance(item, dict)
+    ]
+
+
+def _empty_field(reason: str) -> FieldValue:
+    return FieldValue(
+        value=None,
+        confidence=0.0,
+        abstain_reason=reason,
+    )
+
+
 async def extract(document: Document) -> ExtractionResult:
     """Extract quarry information using the LLM."""
 
@@ -129,32 +178,24 @@ async def extract(document: Document) -> ExtractionResult:
 
     if not api_key:
         return ExtractionResult(
-            name=FieldValue(
-                value=None,
+            official_name=_empty_field("llm_not_configured"),
+            site_type=_empty_field("llm_not_configured"),
+            description=_empty_field("llm_not_configured"),
+            materials_produced=[],
+            certifications=[],
+            operational_status=_empty_field("llm_not_configured"),
+            location_verification=LocationVerification(
+                is_verified=False,
                 confidence=0.0,
-                abstain_reason="llm_not_configured",
-            ),
-            material=FieldValue(
-                value=None,
-                confidence=0.0,
-                abstain_reason="llm_not_configured",
-            ),
-            operator=FieldValue(
-                value=None,
-                confidence=0.0,
-                abstain_reason="llm_not_configured",
-            ),
-            operational_status=FieldValue(
-                value=None,
-                confidence=0.0,
-                abstain_reason="llm_not_configured",
+                extracted_city=None,
+                method="none",
             ),
         )
 
     client = AsyncOpenAI(api_key=api_key)
 
     response = await client.chat.completions.create(
-        model=os.getenv("OPENAI_MODEL", "gpt-4o-mini"),
+        model=os.getenv("OPENAI_MODEL", "gpt-5.4-mini"),
         temperature=0,
         response_format={"type": "json_object"},
         messages=[
@@ -176,21 +217,49 @@ async def extract(document: Document) -> ExtractionResult:
 
     data = json.loads(content)
 
+    location_data = data.get(
+        "location_verification",
+        {},
+    )
+
     return ExtractionResult(
-        name=_field_from_response(
+        official_name=_field_from_response(
             document,
-            data.get("name", {}),
+            data.get("official_name", {}),
         ),
-        material=_field_from_response(
+        site_type=_field_from_response(
             document,
-            data.get("material", {}),
+            data.get("site_type", {}),
         ),
-        operator=_field_from_response(
+        description=_field_from_response(
             document,
-            data.get("operator", {}),
+            data.get("description", {}),
+        ),
+        materials_produced=_list_from_response(
+            document,
+            data.get("materials_produced", []),
+        ),
+        certifications=_list_from_response(
+            document,
+            data.get("certifications", []),
         ),
         operational_status=_field_from_response(
             document,
             data.get("operational_status", {}),
+        ),
+        location_verification=LocationVerification(
+            is_verified=bool(
+                location_data.get("is_verified", False)
+            ),
+            confidence=float(
+                location_data.get("confidence", 0)
+            ),
+            extracted_city=location_data.get(
+                "extracted_city"
+            ),
+            method=location_data.get(
+                "method",
+                "none",
+            ),
         ),
     )

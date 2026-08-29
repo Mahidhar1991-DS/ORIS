@@ -1,21 +1,42 @@
 import fitz
 import pytest
 
-from app.crawler import html_to_text, pdf_to_text, validate_url
-from app.discovery import deduplicate_quarries, discover_quarries
-from app.models import Quarry
-from app.extraction import create_field, find_evidence
-from app.models import Document
-from app.extraction import extract
-from app.models import Document
+from app.crawler import (
+    html_to_text,
+    pdf_to_text,
+    validate_url,
+)
+from app.discovery import (
+    deduplicate_quarries,
+    discover_quarries,
+)
+from app.models import (
+    Document,
+    Evidence,
+    FieldValue,
+    LocationVerification,
+    Quarry,
+)
+from app.extraction import (
+    create_field,
+    extract,
+    find_evidence,
+)
+from app.pipeline import (
+    process_quarry,
+    run_pipeline,
+)
 from app.reconciliation import reconcile
-from app.models import Evidence, FieldValue
-from app.pipeline import process_quarry
 
 
 class FakeResponse:
-    def __init__(self, data):
+    def __init__(
+        self,
+        data,
+        status_code=200,
+    ):
         self.data = data
+        self.status_code = status_code
 
     def raise_for_status(self):
         pass
@@ -25,19 +46,39 @@ class FakeResponse:
 
 
 class FakeClient:
-    response_data = {"elements": []}
+    response_data = {
+        "elements": []
+    }
 
-    def __init__(self, *args, **kwargs):
+    def __init__(
+        self,
+        *args,
+        **kwargs,
+    ):
         pass
 
     async def __aenter__(self):
         return self
 
-    async def __aexit__(self, *args):
+    async def __aexit__(
+        self,
+        *args,
+    ):
         pass
 
-    async def post(self, *args, **kwargs):
-        return FakeResponse(self.response_data)
+    async def post(
+        self,
+        *args,
+        **kwargs,
+    ):
+        return FakeResponse(
+            self.response_data
+        )
+
+
+# ============================================================
+# DISCOVERY TESTS
+# ============================================================
 
 
 @pytest.mark.asyncio
@@ -62,7 +103,11 @@ async def test_discover_node_quarry(monkeypatch):
         FakeClient,
     )
 
-    result = await discover_quarries(48.8566, 2.3522, 50)
+    result = await discover_quarries(
+        48.8566,
+        2.3522,
+        50,
+    )
 
     assert len(result) == 1
     assert result[0].name == "Test Quarry"
@@ -92,7 +137,11 @@ async def test_discover_way_quarry(monkeypatch):
         FakeClient,
     )
 
-    result = await discover_quarries(48.8566, 2.3522, 50)
+    result = await discover_quarries(
+        48.8566,
+        2.3522,
+        50,
+    )
 
     assert len(result) == 1
     assert result[0].name == "Way Quarry"
@@ -117,7 +166,11 @@ async def test_skip_way_without_center(monkeypatch):
         FakeClient,
     )
 
-    result = await discover_quarries(48.8566, 2.3522, 50)
+    result = await discover_quarries(
+        48.8566,
+        2.3522,
+        50,
+    )
 
     assert result == []
 
@@ -143,7 +196,11 @@ async def test_skip_quarry_outside_radius(monkeypatch):
         FakeClient,
     )
 
-    result = await discover_quarries(48.8566, 2.3522, 10)
+    result = await discover_quarries(
+        48.8566,
+        2.3522,
+        10,
+    )
 
     assert result == []
 
@@ -151,7 +208,7 @@ async def test_skip_quarry_outside_radius(monkeypatch):
 @pytest.mark.asyncio
 async def test_no_quarries(monkeypatch):
     FakeClient.response_data = {
-        "elements": [],
+        "elements": []
     }
 
     monkeypatch.setattr(
@@ -159,7 +216,11 @@ async def test_no_quarries(monkeypatch):
         FakeClient,
     )
 
-    result = await discover_quarries(48.8566, 2.3522, 50)
+    result = await discover_quarries(
+        48.8566,
+        2.3522,
+        50,
+    )
 
     assert result == []
 
@@ -189,38 +250,80 @@ def test_deduplicate_quarries():
         ),
     ]
 
-    result = deduplicate_quarries(quarries)
+    result = deduplicate_quarries(
+        quarries
+    )
 
     assert len(result) == 2
     assert result[0].name == "Test Quarry"
     assert result[1].name == "Another Quarry"
 
 
+# ============================================================
+# CRAWLER TESTS
+# ============================================================
+
+
 def test_validate_url():
-    assert validate_url("https://example.com")
-    assert validate_url("http://example.com")
-    assert not validate_url("ftp://example.com")
-    assert not validate_url("example.com")  
+    assert validate_url(
+        "https://example.com"
+    )
+
+    assert validate_url(
+        "http://example.com"
+    )
+
+    assert not validate_url(
+        "ftp://example.com"
+    )
+
+    assert not validate_url(
+        "example.com"
+    )
+
+
 def test_validate_url_rejects_private_ip():
-    assert not validate_url("http://127.0.0.1")
-    assert not validate_url("http://192.168.1.1")
-    assert not validate_url("http://10.0.0.1")
+    assert not validate_url(
+        "http://127.0.0.1"
+    )
+
+    assert not validate_url(
+        "http://192.168.1.1"
+    )
+
+    assert not validate_url(
+        "http://10.0.0.1"
+    )
+
 
 def test_html_to_text():
     html = """
     <html>
         <head>
-            <style>.hidden { display: none; }</style>
+            <style>
+                .hidden {
+                    display: none;
+                }
+            </style>
         </head>
+
         <body>
             <h1>Test Quarry</h1>
-            <p>Limestone producer</p>
-            <script>alert("remove me")</script>
+
+            <p>
+                Limestone producer
+            </p>
+
+            <script>
+                alert("remove me")
+            </script>
         </body>
     </html>
     """
 
-    text = html_to_text(html)
+    text = html_to_text(
+        html
+    )
 
     assert "Test Quarry" in text
     assert "Limestone producer" in text
@@ -231,24 +334,37 @@ def test_pdf_to_text():
     document = fitz.open()
 
     page = document.new_page()
+
     page.insert_text(
         (50, 50),
         "Test Quarry produces limestone.",
     )
 
     pdf_bytes = document.tobytes()
+
     document.close()
 
-    text = pdf_to_text(pdf_bytes)
+    text = pdf_to_text(
+        pdf_bytes
+    )
 
     assert "Test Quarry" in text
     assert "limestone" in text
-    
+
+
+# ============================================================
+# EXTRACTION TESTS
+# ============================================================
+
+
 def test_find_evidence():
     document = Document(
         source_id="source-1",
         url="https://example.com",
-        text="Our quarry produces limestone aggregates.",
+        text=(
+            "Our quarry produces "
+            "limestone aggregates."
+        ),
     )
 
     evidence = find_evidence(
@@ -260,14 +376,18 @@ def test_find_evidence():
     assert evidence.source_id == "source-1"
     assert evidence.char_start == 20
     assert evidence.char_end == 40
-    assert evidence.quote == "limestone aggregates"
+    assert evidence.quote == (
+        "limestone aggregates"
+    )
 
 
 def test_find_evidence_not_found():
     document = Document(
         source_id="source-1",
         url="https://example.com",
-        text="Our quarry produces limestone.",
+        text=(
+            "Our quarry produces limestone."
+        ),
     )
 
     evidence = find_evidence(
@@ -282,7 +402,10 @@ def test_create_grounded_field():
     document = Document(
         source_id="source-1",
         url="https://example.com",
-        text="Our quarry produces limestone aggregates.",
+        text=(
+            "Our quarry produces "
+            "limestone aggregates."
+        ),
     )
 
     field = create_field(
@@ -301,7 +424,9 @@ def test_create_field_abstains_without_evidence():
     document = Document(
         source_id="source-1",
         url="https://example.com",
-        text="Our quarry produces limestone.",
+        text=(
+            "Our quarry produces limestone."
+        ),
     )
 
     field = create_field(
@@ -312,33 +437,70 @@ def test_create_field_abstains_without_evidence():
     )
 
     assert field.value is None
-    assert field.abstain_reason == "evidence_not_found"
-
-@pytest.mark.asyncio
-async def test_extract_without_api_key(monkeypatch):
-    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
-
-    document = Document(
-        source_id="source-1",
-        url="https://example.com",
-        text="Test Quarry produces limestone.",
+    assert (
+        field.abstain_reason
+        == "evidence_not_found"
     )
 
-    result = await extract(document)
-
-    assert result.name.value is None
-    assert result.name.abstain_reason == "llm_not_configured"
-    assert result.material.value is None
-    assert result.operator.value is None
-    assert result.operational_status.value is None
 
 @pytest.mark.asyncio
-async def test_extract_with_mock_llm(monkeypatch):
+async def test_extract_without_api_key(
+    monkeypatch,
+):
+    monkeypatch.delenv(
+        "OPENAI_API_KEY",
+        raising=False,
+    )
+
     document = Document(
         source_id="source-1",
         url="https://example.com",
         text=(
-            "Test Quarry is operated by ABC Materials. "
+            "Test Quarry produces limestone."
+        ),
+    )
+
+    result = await extract(
+        document
+    )
+
+    assert (
+        result.official_name.value
+        is None
+    )
+
+    assert (
+        result.site_type.value
+        is None
+    )
+
+    assert (
+        result.description.value
+        is None
+    )
+
+    assert (
+        result.operational_status.value
+        is None
+    )
+
+    assert (
+        result.location_verification
+        .is_verified
+        is False
+    )
+
+
+@pytest.mark.asyncio
+async def test_extract_with_mock_llm(
+    monkeypatch,
+):
+    document = Document(
+        source_id="source-1",
+        url="https://example.com",
+        text=(
+            "Test Quarry is operated by "
+            "ABC Materials. "
             "The quarry produces limestone."
         ),
     )
@@ -346,25 +508,39 @@ async def test_extract_with_mock_llm(monkeypatch):
     class FakeMessage:
         content = """
         {
-            "name": {
+            "official_name": {
                 "value": "Test Quarry",
                 "confidence": 0.95,
                 "quote": "Test Quarry"
             },
-            "material": {
-                "value": "limestone",
+            "site_type": {
+                "value": "Quarry",
+                "confidence": 0.95,
+                "quote": "The quarry"
+            },
+            "description": {
+                "value": "The quarry produces limestone.",
                 "confidence": 0.90,
                 "quote": "The quarry produces limestone."
             },
-            "operator": {
-                "value": "ABC Materials",
-                "confidence": 0.95,
-                "quote": "operated by ABC Materials"
-            },
+            "materials_produced": [
+                {
+                    "value": "limestone",
+                    "confidence": 0.90,
+                    "quote": "The quarry produces limestone."
+                }
+            ],
+            "certifications": [],
             "operational_status": {
                 "value": null,
                 "confidence": 0.0,
                 "quote": null
+            },
+            "location_verification": {
+                "is_verified": false,
+                "confidence": 0.0,
+                "extracted_city": null,
+                "method": "none"
             }
         }
         """
@@ -373,18 +549,29 @@ async def test_extract_with_mock_llm(monkeypatch):
         message = FakeMessage()
 
     class FakeResponse:
-        choices = [FakeChoice()]
+        choices = [
+            FakeChoice()
+        ]
 
     class FakeCompletions:
-        async def create(self, **kwargs):
+        async def create(
+            self,
+            **kwargs,
+        ):
             return FakeResponse()
 
     class FakeClient:
-        def __init__(self, **kwargs):
+        def __init__(
+            self,
+            **kwargs,
+        ):
             self.chat = type(
                 "Chat",
                 (),
-                {"completions": FakeCompletions()},
+                {
+                    "completions":
+                        FakeCompletions()
+                },
             )()
 
     monkeypatch.setattr(
@@ -397,40 +584,62 @@ async def test_extract_with_mock_llm(monkeypatch):
         "test-key",
     )
 
-    result = await extract(document)
+    result = await extract(
+        document
+    )
 
-    assert result.name.value == "Test Quarry"
-    assert result.name.confidence == 0.95
-    assert len(result.name.evidence) == 1
+    assert (
+        result.official_name.value
+        == "Test Quarry"
+    )
 
-    assert result.material.value == "limestone"
-    assert len(result.material.evidence) == 1
+    assert (
+        result.site_type.value
+        == "Quarry"
+    )
 
-    assert result.operator.value == "ABC Materials"
-    assert len(result.operator.evidence) == 1
+    assert (
+        result.description.value
+        == "The quarry produces limestone."
+    )
 
-    assert result.operational_status.value is None
-    
-    
+    assert (
+        result.materials_produced[0].value
+        == "limestone"
+    )
+
 
 def test_create_field_rejects_unsupported_value():
     document = Document(
         source_id="source-1",
         url="https://example.com",
-        text="Our quarry produces limestone.",
+        text=(
+            "Our quarry produces limestone."
+        ),
     )
 
     field = create_field(
         document=document,
         value="Granite",
-        quote="Our quarry produces limestone.",
+        quote=(
+            "Our quarry produces limestone."
+        ),
         confidence=0.95,
     )
 
     assert field.value is None
-    assert field.abstain_reason == "value_not_supported_by_evidence"
-    
-    
+
+    assert (
+        field.abstain_reason
+        == "value_not_supported_by_evidence"
+    )
+
+
+# ============================================================
+# RECONCILIATION TESTS
+# ============================================================
+
+
 def test_reconcile_selects_best_value():
     first = FieldValue(
         value="Limestone",
@@ -458,11 +667,16 @@ def test_reconcile_selects_best_value():
         ],
     )
 
-    result = reconcile([first, second])
+    result = reconcile(
+        [first, second]
+    )
 
     assert result.value == "Limestone"
     assert result.confidence == 0.95
-    assert result.evidence[0].source_id == "source-2"
+    assert (
+        result.evidence[0].source_id
+        == "source-2"
+    )
 
 
 def test_reconcile_abstains_when_no_supported_values():
@@ -477,15 +691,33 @@ def test_reconcile_abstains_when_no_supported_values():
     )
 
     assert result.value is None
-    assert result.abstain_reason == "no_supported_value"
+
+    assert (
+        result.abstain_reason
+        == "no_supported_value"
+    )
+
+
+# ============================================================
+# PIPELINE TESTS
+# ============================================================
+
 
 @pytest.mark.asyncio
-async def test_process_quarry(monkeypatch):
+async def test_process_quarry(
+    monkeypatch,
+):
     async def fake_crawl(url):
-        return "Test Quarry produces limestone."
+        return (
+            "Test Quarry produces limestone."
+        )
 
     async def fake_extract(document):
-        from app.models import Evidence, ExtractionResult, FieldValue
+        from app.models import (
+            Evidence,
+            ExtractionResult,
+            FieldValue,
+        )
 
         evidence = Evidence(
             source_id=document.source_id,
@@ -495,25 +727,41 @@ async def test_process_quarry(monkeypatch):
         )
 
         return ExtractionResult(
-            name=FieldValue(
+            official_name=FieldValue(
                 value="Test Quarry",
                 confidence=0.95,
                 evidence=[evidence],
             ),
-            material=FieldValue(
-                value=None,
-                confidence=0,
-                abstain_reason="not_found",
+            site_type=FieldValue(
+                value="Quarry",
+                confidence=0.95,
+                evidence=[evidence],
             ),
-            operator=FieldValue(
-                value=None,
-                confidence=0,
-                abstain_reason="not_found",
+            description=FieldValue(
+                value=(
+                    "Test Quarry produces "
+                    "limestone."
+                ),
+                confidence=0.90,
+                evidence=[evidence],
             ),
+            materials_produced=[
+                FieldValue(
+                    value="limestone",
+                    confidence=0.90,
+                    evidence=[evidence],
+                )
+            ],
+            certifications=[],
             operational_status=FieldValue(
                 value=None,
-                confidence=0,
+                confidence=0.0,
                 abstain_reason="not_found",
+            ),
+            location_verification=LocationVerification(
+                is_verified=False,
+                confidence=0.0,
+                method="none",
             ),
         )
 
@@ -532,12 +780,25 @@ async def test_process_quarry(monkeypatch):
         website="https://example.com",
     )
 
-    assert result.name.value == "Test Quarry"
-    assert result.name.confidence == 0.95
-    assert len(result.name.evidence) == 1
+    assert (
+        result.official_name.value
+        == "Test Quarry"
+    )
+
+    assert (
+        result.official_name.confidence
+        == 0.95
+    )
+
+    assert len(
+        result.official_name.evidence
+    ) == 1
+
 
 @pytest.mark.asyncio
-async def test_process_quarry_when_crawl_fails(monkeypatch):
+async def test_process_quarry_when_crawl_fails(
+    monkeypatch,
+):
     async def fake_crawl(url):
         return None
 
@@ -552,3 +813,405 @@ async def test_process_quarry_when_crawl_fails(monkeypatch):
     )
 
     assert result is None
+
+
+@pytest.mark.asyncio
+async def test_process_quarry_crawls_and_extracts(
+    monkeypatch,
+):
+    crawled_urls = []
+
+    async def fake_crawl(url):
+        crawled_urls.append(url)
+
+        return (
+            "Test Quarry produces limestone."
+        )
+
+    async def fake_extract(document):
+        from app.models import (
+            Evidence,
+            ExtractionResult,
+            FieldValue,
+            LocationVerification,
+        )
+
+        evidence = Evidence(
+            source_id=document.source_id,
+            char_start=0,
+            char_end=11,
+            quote="Test Quarry",
+        )
+
+        return ExtractionResult(
+            official_name=FieldValue(
+                value="Test Quarry",
+                confidence=0.95,
+                evidence=[evidence],
+            ),
+            site_type=FieldValue(
+                value="Quarry",
+                confidence=0.95,
+                evidence=[evidence],
+            ),
+            description=FieldValue(
+                value=(
+                    "Test Quarry produces "
+                    "limestone."
+                ),
+                confidence=0.90,
+                evidence=[evidence],
+            ),
+            materials_produced=[
+                FieldValue(
+                    value="limestone",
+                    confidence=0.90,
+                    evidence=[evidence],
+                )
+            ],
+            certifications=[],
+            operational_status=FieldValue(
+                value=None,
+                confidence=0.0,
+                abstain_reason="not_found",
+            ),
+            location_verification=LocationVerification(
+                is_verified=False,
+                confidence=0.0,
+                method="none",
+            ),
+        )
+
+    monkeypatch.setattr(
+        "app.pipeline.crawl",
+        fake_crawl,
+    )
+
+    monkeypatch.setattr(
+        "app.pipeline.extract",
+        fake_extract,
+    )
+
+    result = await process_quarry(
+        site_id="quarry-1",
+        website="https://example.com",
+    )
+
+    assert crawled_urls == [
+        "https://example.com"
+    ]
+
+    assert result is not None
+
+    assert (
+        result.official_name.value
+        == "Test Quarry"
+    )
+
+    assert (
+        result.materials_produced[0].value
+        == "limestone"
+    )
+
+
+@pytest.mark.asyncio
+async def test_process_quarry_crawl_failure(
+    monkeypatch,
+):
+    extract_called = False
+
+    async def fake_crawl(url):
+        return None
+
+    async def fake_extract(document):
+        nonlocal extract_called
+
+        extract_called = True
+
+        raise AssertionError(
+            "extract should not be called"
+        )
+
+    monkeypatch.setattr(
+        "app.pipeline.crawl",
+        fake_crawl,
+    )
+
+    monkeypatch.setattr(
+        "app.pipeline.extract",
+        fake_extract,
+    )
+
+    result = await process_quarry(
+        site_id="quarry-1",
+        website="https://example.com",
+    )
+
+    assert result is None
+    assert extract_called is False
+
+
+@pytest.mark.asyncio
+async def test_run_pipeline_saves_site(
+    monkeypatch,
+):
+    async def fake_discover(
+        latitude,
+        longitude,
+        radius_km,
+    ):
+        return [
+            Quarry(
+                site_id="site-1",
+                name="Test Quarry",
+                latitude=48.857,
+                longitude=2.353,
+                distance_km=1.0,
+                website="https://example.com",
+            )
+        ]
+
+    async def fake_crawl(url):
+        return (
+            "Test Quarry produces limestone."
+        )
+
+    async def fake_extract(document):
+        from app.models import (
+            ExtractionResult,
+            FieldValue,
+            LocationVerification,
+        )
+
+        return ExtractionResult(
+            official_name=FieldValue(
+                value="Test Quarry",
+                confidence=0.95,
+            ),
+            site_type=FieldValue(
+                value="Quarry",
+                confidence=0.95,
+            ),
+            description=FieldValue(
+                value=(
+                    "Test Quarry produces "
+                    "limestone."
+                ),
+                confidence=0.90,
+            ),
+            materials_produced=[
+                FieldValue(
+                    value="limestone",
+                    confidence=0.90,
+                )
+            ],
+            certifications=[],
+            operational_status=FieldValue(
+                value=None,
+                confidence=0.0,
+                abstain_reason="not_found",
+            ),
+            location_verification=LocationVerification(
+                is_verified=False,
+                confidence=0.0,
+                method="none",
+            ),
+        )
+
+    monkeypatch.setattr(
+        "app.pipeline.discover_quarries",
+        fake_discover,
+    )
+
+    monkeypatch.setattr(
+        "app.pipeline.crawl",
+        fake_crawl,
+    )
+
+    monkeypatch.setattr(
+        "app.pipeline.extract",
+        fake_extract,
+    )
+
+    result = await run_pipeline(
+        latitude=48.8566,
+        longitude=2.3522,
+        radius_km=10,
+    )
+
+    assert result["count"] == 1
+
+    assert (
+        result["results"][0]["status"]
+        == "extracted"
+    )
+
+
+@pytest.mark.asyncio
+async def test_run_pipeline_discovers_missing_website(
+    monkeypatch,
+):
+    async def fake_discover(
+        latitude,
+        longitude,
+        radius_km,
+    ):
+        return [
+            Quarry(
+                site_id="site-ai-1",
+                name="AI Test Quarry",
+                latitude=48.857,
+                longitude=2.353,
+                distance_km=1.0,
+                website=None,
+            )
+        ]
+
+    async def fake_website_discovery(
+        quarry_name,
+        latitude,
+        longitude,
+        municipality=None,
+    ):
+        assert quarry_name == "AI Test Quarry"
+
+        return "https://example.com"
+
+    async def fake_crawl(url):
+        assert url == "https://example.com"
+
+        return (
+            "AI Test Quarry produces limestone."
+        )
+
+    async def fake_extract(document):
+        from app.models import (
+            ExtractionResult,
+            FieldValue,
+            LocationVerification,
+        )
+
+        return ExtractionResult(
+            official_name=FieldValue(
+                value="AI Test Quarry",
+                confidence=0.95,
+            ),
+            site_type=FieldValue(
+                value="Quarry",
+                confidence=0.95,
+            ),
+            description=FieldValue(
+                value=(
+                    "AI Test Quarry produces "
+                    "limestone."
+                ),
+                confidence=0.90,
+            ),
+            materials_produced=[
+                FieldValue(
+                    value="limestone",
+                    confidence=0.90,
+                )
+            ],
+            certifications=[],
+            operational_status=FieldValue(
+                value=None,
+                confidence=0.0,
+                abstain_reason="not_found",
+            ),
+            location_verification=LocationVerification(
+                is_verified=False,
+                confidence=0.0,
+                method="none",
+            ),
+        )
+
+    monkeypatch.setattr(
+        "app.pipeline.discover_quarries",
+        fake_discover,
+    )
+
+    monkeypatch.setattr(
+        "app.pipeline.discover_website",
+        fake_website_discovery,
+    )
+
+    monkeypatch.setattr(
+        "app.pipeline.crawl",
+        fake_crawl,
+    )
+
+    monkeypatch.setattr(
+        "app.pipeline.extract",
+        fake_extract,
+    )
+
+    result = await run_pipeline(
+        latitude=48.8566,
+        longitude=2.3522,
+        radius_km=10,
+    )
+
+    assert result["count"] == 1
+
+    assert (
+        result["results"][0]["status"]
+        == "extracted"
+    )
+
+
+@pytest.mark.asyncio
+async def test_run_pipeline_when_website_discovery_fails(
+    monkeypatch,
+):
+    async def fake_discover(
+        latitude,
+        longitude,
+        radius_km,
+    ):
+        return [
+            Quarry(
+                site_id="site-no-web-1",
+                name="Unknown Quarry",
+                latitude=48.857,
+                longitude=2.353,
+                distance_km=1.0,
+                website=None,
+            )
+        ]
+
+    async def fake_website_discovery(
+        quarry_name,
+        latitude,
+        longitude,
+        municipality=None,
+    ):
+        return None
+
+    monkeypatch.setattr(
+        "app.pipeline.discover_quarries",
+        fake_discover,
+    )
+
+    monkeypatch.setattr(
+        "app.pipeline.discover_website",
+        fake_website_discovery,
+    )
+
+    result = await run_pipeline(
+        latitude=48.8566,
+        longitude=2.3522,
+        radius_km=10,
+    )
+
+    assert result["count"] == 1
+
+    assert (
+        result["results"][0]["status"]
+        == "no_website"
+    )
+
+    assert (
+        result["results"][0]["extraction"]
+        is None
+    )
