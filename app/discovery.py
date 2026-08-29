@@ -5,12 +5,16 @@ from app.utils import haversine_distance_km, stable_id
 
 
 OVERPASS_ENDPOINTS = [
-
     "https://overpass-api.de/api/interpreter",
     "https://overpass.kumi.systems/api/interpreter",
 ]
 
 USER_AGENT = "ORIS-QuarryResearch/1.0"
+
+CONNECT_TIMEOUT = 10.0
+READ_TIMEOUT = 45.0
+WRITE_TIMEOUT = 45.0
+POOL_TIMEOUT = 10.0
 
 
 def _build_quarry_query(
@@ -48,7 +52,12 @@ async def _query_overpass(
     endpoint: str,
     query: str,
 ) -> dict:
-    """Execute one Overpass query."""
+    """
+    Execute one Overpass request.
+
+    HTTP/network errors are allowed to propagate so the caller
+    can try the next provider.
+    """
 
     response = await client.post(
         endpoint,
@@ -73,26 +82,14 @@ def _parse_quarries(
     longitude: float,
     radius_km: float,
 ) -> list[Quarry]:
-    """Convert Overpass response into Quarry objects."""
+    """Convert an Overpass response into Quarry objects."""
 
-    quarries = []
+    quarries: list[Quarry] = []
 
-    for element in data.get(
-        "elements",
-        [],
-    ):
-        tags = element.get(
-            "tags",
-            {},
-        )
+    for element in data.get("elements", []):
+        tags = element.get("tags", {})
+        element_type = element.get("type")
 
-        element_type = element.get(
-            "type"
-        )
-
-        # ---------------------------------------------------------
-        # Node.
-        # ---------------------------------------------------------
         if element_type == "node":
             lat = element.get("lat")
             lon = element.get("lon")
@@ -100,13 +97,8 @@ def _parse_quarries(
             if lat is None or lon is None:
                 continue
 
-        # ---------------------------------------------------------
-        # Way / relation.
-        # ---------------------------------------------------------
-        else:
-            center = element.get(
-                "center"
-            )
+        elif element_type in {"way", "relation"}:
+            center = element.get("center")
 
             if not center:
                 continue
@@ -117,9 +109,9 @@ def _parse_quarries(
             if lat is None or lon is None:
                 continue
 
-        # ---------------------------------------------------------
-        # Distance.
-        # ---------------------------------------------------------
+        else:
+            continue
+
         distance = haversine_distance_km(
             latitude,
             longitude,
@@ -130,16 +122,15 @@ def _parse_quarries(
         if distance > radius_km:
             continue
 
-        # ---------------------------------------------------------
-        # Stable site ID.
-        # ---------------------------------------------------------
+        element_id = element.get("id")
+
+        if element_id is None:
+            continue
+
         site_id = stable_id(
-            f"{element_type}:{element['id']}"
+            f"{element_type}:{element_id}"
         )
 
-        # ---------------------------------------------------------
-        # Website from OSM.
-        # ---------------------------------------------------------
         website = (
             tags.get("website")
             or tags.get("contact:website")
@@ -152,10 +143,7 @@ def _parse_quarries(
                 municipality=None,
                 latitude=lat,
                 longitude=lon,
-                distance_km=round(
-                    distance,
-                    3,
-                ),
+                distance_km=round(distance, 3),
                 website=website,
             )
         )
@@ -171,10 +159,17 @@ async def discover_quarries(
     """
     Discover quarry sites around a coordinate.
 
-    Municipality resolution is intentionally excluded
-    from this stage.
+    The function tries each configured Overpass provider
+    independently.
 
-    This function only discovers OSM quarry records.
+    Important distinction:
+
+    - Successful response with zero elements means a valid
+      empty discovery result.
+    - Network/HTTP/provider failure means the provider is
+      unavailable and the next provider is tried.
+
+    If every provider fails, RuntimeError is raised.
     """
 
     query = _build_quarry_query(
@@ -184,13 +179,13 @@ async def discover_quarries(
     )
 
     timeout = httpx.Timeout(
-        connect=10.0,
-        read=45.0,
-        write=45.0,
-        pool=10.0,
+        connect=CONNECT_TIMEOUT,
+        read=READ_TIMEOUT,
+        write=WRITE_TIMEOUT,
+        pool=POOL_TIMEOUT,
     )
 
-    last_error = None
+    last_error: Exception | None = None
 
     async with httpx.AsyncClient(
         timeout=timeout,
@@ -198,7 +193,6 @@ async def discover_quarries(
     ) as client:
 
         for endpoint in OVERPASS_ENDPOINTS:
-
             print(
                 f"QUERYING OVERPASS: {endpoint}",
                 flush=True,
@@ -224,14 +218,41 @@ async def discover_quarries(
                 )
 
                 print(
-                    f"QUARRIES DISCOVERED: "
-                    f"{len(quarries)}",
+                    f"QUARRIES DISCOVERED: {len(quarries)}",
                     flush=True,
                 )
 
                 return quarries
 
-            except httpx.HTTPError as exc:
+            except httpx.HTTPStatusError as exc:
+                last_error = exc
+
+                print(
+                    f"OVERPASS HTTP ERROR: "
+                    f"{endpoint}: "
+                    f"{exc.response.status_code}",
+                    flush=True,
+                )
+
+            except httpx.RequestError as exc:
+                last_error = exc
+
+                print(
+                    f"OVERPASS CONNECTION ERROR: "
+                    f"{endpoint}: {exc}",
+                    flush=True,
+                )
+
+            except (ValueError, TypeError) as exc:
+                last_error = exc
+
+                print(
+                    f"OVERPASS INVALID RESPONSE: "
+                    f"{endpoint}: {exc}",
+                    flush=True,
+                )
+
+            except Exception as exc:
                 last_error = exc
 
                 print(
@@ -239,8 +260,6 @@ async def discover_quarries(
                     f"{endpoint}: {exc}",
                     flush=True,
                 )
-
-                continue
 
     raise RuntimeError(
         "All Overpass endpoints failed: "
@@ -253,13 +272,11 @@ def deduplicate_quarries(
 ) -> list[Quarry]:
     """Remove duplicate quarry records."""
 
-    unique = {}
+    unique: dict[str, Quarry] = {}
 
     for quarry in quarries:
-
         if quarry.name:
             key = quarry.name.lower().strip()
-
         else:
             key = (
                 f"{quarry.latitude:.5f}:"

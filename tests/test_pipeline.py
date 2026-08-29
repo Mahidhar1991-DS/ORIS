@@ -1,4 +1,5 @@
 import fitz
+import httpx
 import pytest
 
 from app.crawler import (
@@ -112,6 +113,107 @@ async def test_discover_node_quarry(monkeypatch):
     assert len(result) == 1
     assert result[0].name == "Test Quarry"
     assert result[0].website == "https://example.com"
+@pytest.mark.asyncio
+async def test_discover_uses_second_overpass_endpoint(
+    monkeypatch,
+):
+    calls = []
+
+    async def fake_query(
+        client,
+        endpoint,
+        query,
+    ):
+        calls.append(endpoint)
+
+        if len(calls) == 1:
+            raise httpx.ConnectError(
+                "first endpoint unavailable"
+            )
+
+        return {
+            "elements": [
+                {
+                    "type": "node",
+                    "id": 999,
+                    "lat": 48.857,
+                    "lon": 2.353,
+                    "tags": {
+                        "name": "Fallback Quarry",
+                    },
+                }
+            ]
+        }
+
+    monkeypatch.setattr(
+        "app.discovery._query_overpass",
+        fake_query,
+    )
+
+    result = await discover_quarries(
+        48.8566,
+        2.3522,
+        50,
+    )
+
+    assert len(calls) == 2
+    assert result[0].name == "Fallback Quarry"
+
+
+@pytest.mark.asyncio
+async def test_discover_returns_empty_when_provider_succeeds(
+    monkeypatch,
+):
+    async def fake_query(
+        client,
+        endpoint,
+        query,
+    ):
+        return {
+            "elements": []
+        }
+
+    monkeypatch.setattr(
+        "app.discovery._query_overpass",
+        fake_query,
+    )
+
+    result = await discover_quarries(
+        48.8566,
+        2.3522,
+        50,
+    )
+
+    assert result == []
+
+
+@pytest.mark.asyncio
+async def test_discover_raises_when_all_overpass_endpoints_fail(
+    monkeypatch,
+):
+    async def fake_query(
+        client,
+        endpoint,
+        query,
+    ):
+        raise httpx.ConnectError(
+            "Overpass unavailable"
+        )
+
+    monkeypatch.setattr(
+        "app.discovery._query_overpass",
+        fake_query,
+    )
+
+    with pytest.raises(
+        RuntimeError,
+        match="All Overpass endpoints failed",
+    ):
+        await discover_quarries(
+            48.8566,
+            2.3522,
+            50,
+        )
 
 
 @pytest.mark.asyncio
