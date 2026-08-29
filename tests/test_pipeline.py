@@ -1121,7 +1121,10 @@ async def test_process_quarry(
             "Test Quarry produces limestone."
         )
 
-    async def fake_extract(document):
+    async def fake_extract(
+    document,
+    cost_tracker=None,
+):
         from app.models import (
             Evidence,
             ExtractionResult,
@@ -1237,7 +1240,10 @@ async def test_process_quarry_crawls_and_extracts(
             "Test Quarry produces limestone."
         )
 
-    async def fake_extract(document):
+    async def fake_extract(
+    document,
+    cost_tracker=None,
+):
         from app.models import (
             Evidence,
             ExtractionResult,
@@ -1332,7 +1338,10 @@ async def test_process_quarry_crawl_failure(
     async def fake_crawl(url):
         return None
 
-    async def fake_extract(document):
+    async def fake_extract(
+    document,
+    cost_tracker=None,
+):
         nonlocal extract_called
 
         extract_called = True
@@ -1385,7 +1394,10 @@ async def test_run_pipeline_saves_site(
             "Test Quarry produces limestone."
         )
 
-    async def fake_extract(document):
+    async def fake_extract(
+    document,
+    cost_tracker=None,
+):
         from app.models import (
             ExtractionResult,
             FieldValue,
@@ -1477,11 +1489,12 @@ async def test_run_pipeline_discovers_missing_website(
         ]
 
     async def fake_website_discovery(
-        quarry_name,
-        latitude,
-        longitude,
-        municipality=None,
-    ):
+    quarry_name,
+    latitude,
+    longitude,
+    municipality=None,
+    cost_tracker=None,
+):
         assert quarry_name == "AI Test Quarry"
 
         return "https://example.com"
@@ -1493,7 +1506,10 @@ async def test_run_pipeline_discovers_missing_website(
             "AI Test Quarry produces limestone."
         )
 
-    async def fake_extract(document):
+    async def fake_extract(
+    document,
+    cost_tracker=None,
+):
         from app.models import (
             ExtractionResult,
             FieldValue,
@@ -1594,6 +1610,7 @@ async def test_run_pipeline_when_website_discovery_fails(
         latitude,
         longitude,
         municipality=None,
+        cost_tracker=None,
     ):
         return None
 

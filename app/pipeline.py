@@ -1,6 +1,7 @@
 import hashlib
 import unicodedata
 from uuid import uuid4
+from app.llm_cost import CostTracker
 
 from app.crawler import crawl, crawl_with_status
 from app.database import save_site
@@ -20,6 +21,7 @@ from app.models import (
     Source,
 )
 from app.website_discovery import discover_website
+
 
 
 SCRAPER_VERSION = "1.0.0"
@@ -144,7 +146,12 @@ async def run_pipeline(
     latitude: float,
     longitude: float,
     radius_km: float,
+    max_usd_cost: float | None = None,
 ) -> dict:
+
+    cost_tracker = CostTracker(
+        max_usd_cost=max_usd_cost,
+    )
     """
     Run quarry discovery and enrichment.
 
@@ -217,6 +224,7 @@ async def run_pipeline(
                 municipality=quarry.municipality,
                 latitude=quarry.latitude,
                 longitude=quarry.longitude,
+                cost_tracker=cost_tracker,
             )
 
             if website:
@@ -294,8 +302,9 @@ async def run_pipeline(
         # Step 9: Extract grounded information.
         # -----------------------------------------------------
         extraction = await extract(
-            document
-        )
+    document,
+    cost_tracker=cost_tracker,
+)
 
         extraction = verify_extracted_location(
             extraction=extraction,
@@ -326,7 +335,12 @@ async def run_pipeline(
             provenance=Provenance(
                 sources=[source],
             ),
-            metrics=Metrics(),
+            metrics=Metrics(
+                llm_tokens_in=cost_tracker.tokens_in,
+                llm_tokens_out=cost_tracker.tokens_out,
+                usd_cost=cost_tracker.usd_cost,
+                model_calls=cost_tracker.model_calls,
+            ),
             run_metadata=build_run_metadata(
                 text
             ),

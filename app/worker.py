@@ -34,6 +34,7 @@ async def process_job(job: Job) -> None:
         latitude = request["latitude"]
         longitude = request["longitude"]
         radius_km = request["radius_km"]
+        max_usd_cost = request.get("max_usd_cost")
 
         print(
             f"JOB {job.job_id}: starting pipeline",
@@ -54,6 +55,7 @@ async def process_job(job: Job) -> None:
             latitude=latitude,
             longitude=longitude,
             radius_km=radius_km,
+            max_usd_cost=max_usd_cost,
         )
 
         print(

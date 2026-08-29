@@ -4,6 +4,7 @@ import os
 from dotenv import load_dotenv
 from openai import AsyncOpenAI
 
+from app.llm_cost import CostTracker, calculate_cost, create_model_call
 from app.models import (
     Document,
     Evidence,
@@ -171,7 +172,10 @@ def _empty_field(reason: str) -> FieldValue:
     )
 
 
-async def extract(document: Document) -> ExtractionResult:
+async def extract(
+    document: Document,
+    cost_tracker: CostTracker | None = None,
+) -> ExtractionResult:
     """Extract quarry information using the LLM."""
 
     api_key = os.getenv("OPENAI_API_KEY")
@@ -194,9 +198,36 @@ async def extract(document: Document) -> ExtractionResult:
 
     client = AsyncOpenAI(api_key=api_key)
 
+    if cost_tracker is not None:
+        model = os.getenv(
+            "OPENAI_MODEL",
+            "gpt-5.4-mini",
+        )
+
+        estimated_input_tokens = (
+            len(SYSTEM_PROMPT)
+            + len(document.text[:12000])
+        ) // 4
+
+        estimated_output_tokens = 800
+
+        estimated_cost = calculate_cost(
+            model=model,
+            tokens_in=estimated_input_tokens,
+            tokens_out=estimated_output_tokens,
+        )
+
+        if not cost_tracker.can_call(
+            estimated_cost=estimated_cost
+        ):
+            raise RuntimeError(
+                "LLM budget exhausted before extraction"
+            )
+
     response = await client.chat.completions.create(
-        model=os.getenv("OPENAI_MODEL", "gpt-5.4-mini"),
-        temperature=0,
+    model=os.getenv("OPENAI_MODEL", "gpt-5.4-mini"),
+    temperature=0,
+    max_tokens=800,
         response_format={"type": "json_object"},
         messages=[
             {
@@ -209,6 +240,46 @@ async def extract(document: Document) -> ExtractionResult:
             },
         ],
     )
+    if cost_tracker is not None:
+        usage = getattr(
+            response,
+            "usage",
+            None,
+        )
+
+        tokens_in = int(
+            getattr(
+                usage,
+                "prompt_tokens",
+                0,
+            )
+            or 0
+        )
+
+        tokens_out = int(
+            getattr(
+                usage,
+                "completion_tokens",
+                0,
+            )
+            or 0
+        )
+
+        model = os.getenv(
+            "OPENAI_MODEL",
+            "gpt-5.4-mini",
+        )
+
+        model_call = create_model_call(
+            model=model,
+            purpose="extraction",
+            tokens_in=tokens_in,
+            tokens_out=tokens_out,
+        )
+
+        cost_tracker.record(
+            model_call
+        )
 
     content = response.choices[0].message.content
 

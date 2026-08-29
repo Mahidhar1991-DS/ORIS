@@ -6,6 +6,7 @@ from urllib.parse import urlparse
 from dotenv import load_dotenv
 from openai import AsyncOpenAI
 
+from app.llm_cost import CostTracker, calculate_cost, create_model_call
 
 load_dotenv(".env")
 
@@ -233,13 +234,52 @@ async def _request_website_discovery(
     client: AsyncOpenAI,
     model: str,
     prompt: str,
+    cost_tracker: CostTracker | None = None,
+    purpose: str = "website_discovery",
 ) -> str | None:
     """
     Execute one website discovery request.
 
     Uses structured JSON output so that the model is strongly
     constrained to return the expected object.
+
+    When a CostTracker is supplied, actual token usage and
+    calculated USD cost are recorded after the request.
     """
+
+    # ---------------------------------------------------------
+    # Check whether another LLM call is allowed.
+    #
+    # We cannot know the exact cost before the API request,
+    # because the final token usage is returned by OpenAI.
+    # Therefore the tracker prevents calls after the already
+    # accumulated budget has been exhausted.
+    # ---------------------------------------------------------
+    if cost_tracker is not None:
+        estimated_input_tokens = (
+            len(SYSTEM_PROMPT) + len(prompt)
+        ) // 4
+
+        estimated_output_tokens = 300
+
+        estimated_cost = calculate_cost(
+            model=model,
+            tokens_in=estimated_input_tokens,
+            tokens_out=estimated_output_tokens,
+        )
+
+        if not cost_tracker.can_call(
+            estimated_cost=estimated_cost
+        ):
+            logger.warning(
+                "Website discovery skipped because "
+                "estimated cost would exceed budget: "
+                "used=$%.8f estimated=$%.8f remaining=$%s",
+                cost_tracker.usd_cost,
+                estimated_cost,
+                cost_tracker.remaining_usd,
+            )
+            return None
 
     try:
         response = await client.responses.create(
@@ -299,6 +339,56 @@ async def _request_website_discovery(
         )
         return None
 
+    # ---------------------------------------------------------
+    # Record actual token usage.
+    # ---------------------------------------------------------
+    if cost_tracker is not None:
+        usage = getattr(
+            response,
+            "usage",
+            None,
+        )
+
+        tokens_in = int(
+            getattr(
+                usage,
+                "input_tokens",
+                0,
+            )
+            or 0
+        )
+
+        tokens_out = int(
+            getattr(
+                usage,
+                "output_tokens",
+                0,
+            )
+            or 0
+        )
+
+        model_call = create_model_call(
+            model=model,
+            purpose=purpose,
+            tokens_in=tokens_in,
+            tokens_out=tokens_out,
+        )
+
+        cost_tracker.record(
+            model_call
+        )
+
+        logger.info(
+            "Website discovery usage: "
+            "purpose=%s input_tokens=%d output_tokens=%d "
+            "cost=$%.8f total=$%.8f",
+            purpose,
+            tokens_in,
+            tokens_out,
+            model_call.usd_cost,
+            cost_tracker.usd_cost,
+        )
+
     text = response.output_text
 
     if not text:
@@ -315,6 +405,7 @@ async def discover_website(
     latitude: float,
     longitude: float,
     municipality: str | None = None,
+    cost_tracker: CostTracker | None = None,
 ) -> str | None:
     """
     Find a likely official website for a quarry.
@@ -494,10 +585,12 @@ Return only the required JSON object.
     # First attempt.
     # ---------------------------------------------------------
     text = await _request_website_discovery(
-        client,
-        model,
-        prompt,
-    )
+    client,
+    model,
+    prompt,
+    cost_tracker=cost_tracker,
+    purpose="website_discovery",
+)
 
     if not text:
         return None
@@ -550,6 +643,8 @@ The reason must be fewer than 20 words.
             client,
             model,
             retry_prompt,
+            cost_tracker=cost_tracker,
+            purpose="website_discovery_retry",
         )
 
         if not text:

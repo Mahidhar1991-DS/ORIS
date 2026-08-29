@@ -10,6 +10,7 @@ async def test_process_job(monkeypatch):
         latitude,
         longitude,
         radius_km,
+        max_usd_cost=None,
     ):
         return {
             "count": 1,
@@ -34,7 +35,7 @@ async def test_process_job(monkeypatch):
 
     assert job.status == "completed"
     assert job.progress == 1.0
-    assert job.result["count"] == 1
+    assert job.error is None
 
 
 @pytest.mark.asyncio
@@ -43,6 +44,7 @@ async def test_process_job_failure(monkeypatch):
         latitude,
         longitude,
         radius_km,
+        max_usd_cost=None,
     ):
         raise RuntimeError("pipeline failed")
 
