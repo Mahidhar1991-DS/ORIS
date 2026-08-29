@@ -1641,3 +1641,58 @@ async def test_run_pipeline_when_website_discovery_fails(
         result["results"][0]["extraction"]
         is None
     )
+
+@pytest.mark.asyncio
+async def test_run_pipeline_passes_cost_tracker_to_website_discovery(
+    monkeypatch,
+):
+    captured = {}
+
+    async def fake_discover(
+        latitude,
+        longitude,
+        radius_km,
+    ):
+        return [
+            Quarry(
+                site_id="site-cost-1",
+                name="Unknown Quarry",
+                latitude=48.857,
+                longitude=2.353,
+                distance_km=1.0,
+                website=None,
+            )
+        ]
+
+    async def fake_website_discovery(
+        quarry_name,
+        latitude,
+        longitude,
+        municipality=None,
+        cost_tracker=None,
+    ):
+        captured["cost_tracker"] = cost_tracker
+        return None
+
+    monkeypatch.setattr(
+        "app.pipeline.discover_quarries",
+        fake_discover,
+    )
+
+    monkeypatch.setattr(
+        "app.pipeline.discover_website",
+        fake_website_discovery,
+    )
+
+    result = await run_pipeline(
+        latitude=48.8566,
+        longitude=2.3522,
+        radius_km=10,
+        max_usd_cost=1.0,
+    )
+
+    assert result["count"] == 1
+    assert result["results"][0]["status"] == "no_website"
+
+    assert captured["cost_tracker"] is not None
+    assert captured["cost_tracker"].max_usd_cost == 1.0
