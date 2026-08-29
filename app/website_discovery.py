@@ -14,93 +14,27 @@ load_dotenv(".env")
 logger = logging.getLogger(__name__)
 
 
-SYSTEM_PROMPT = """
-You identify the official website of a quarry or quarry operator.
+SYSTEM_PROMPT = SYSTEM_PROMPT = """
+Identify the official website of the quarry or quarry operator.
 
-Your job is entity resolution, not website guessing.
+This is entity resolution, not website guessing.
 
 Rules:
+1. Return a website only when strong evidence connects it to the quarry/site and operator.
+2. Prefer the official operator/company website.
+3. Never guess.
+4. Coordinates are supporting evidence only, not sufficient proof.
+5. Use the municipality as geographic evidence when provided.
+6. If the quarry name is UNKNOWN, identify the quarry, operator, location, and official website from web search.
+7. For French locations, use relevant terms such as "carrière", "carrière de granulats", "site d'extraction", and "exploitation de carrière".
+8. Reject directories, maps, Google Maps, social media, reviews, Wikipedia, search-result pages, and generic business databases.
+9. Do not assume an operator is responsible merely because it operates elsewhere in the region.
+10. If the candidate cannot be confidently connected to the supplied quarry/location, return null.
+11. Return JSON only with a short reason.
 
-1. Only return a website when there is strong evidence that it belongs
-   to the identified quarry or its operator.
-
-2. Prefer the quarry operator's official website.
-
-3. Do not return:
-   - directories
-   - social media
-   - review websites
-   - Google Maps
-   - map websites
-   - search-result pages
-   - Wikipedia
-   - generic business databases
-
-4. Never guess a website.
-
-5. Coordinates are approximate supporting evidence.
-   They are NOT sufficient by themselves to establish identity.
-
-6. When the quarry name is UNKNOWN, first use web search to identify:
-   - the likely municipality/location
-   - the quarry name
-   - the operator/company
-   - the official website
-
-7. For French locations, search using French terminology such as:
-   - carrière
-   - carrière de granulats
-   - carrière de sable
-   - carrière de pierre
-   - carrière de gypse
-   - exploitation de carrière
-   - site d'extraction
-
-8. Search using multiple combinations when the name is unknown:
-   - exact coordinates
-   - latitude and longitude
-   - nearby municipality
-   - "carrière" + municipality
-   - "carrière" + coordinates
-   - quarry + municipality
-   - quarry operator + municipality
-
-9. A website should only be accepted when there is a reasonable
-   connection between:
-   - quarry/site identity
-   - operator
-   - geographic location
-   - official website
-
-10. When a municipality is provided, use it as geographic evidence.
-    The municipality was resolved from the administrative boundary
-    containing the quarry coordinates.
-
-11. If search results identify only a nearby quarry but do not establish
-    that it corresponds to the supplied coordinates, return null.
-
-12. Do not infer that a company operates the quarry merely because
-    the company operates somewhere in the same region.
-
-13. If the official website cannot be established confidently,
-    return null.
-
-14. Return valid JSON only.
-
-15. Keep the reason SHORT. Do not write a long explanation.
-
-Return exactly:
-
+Output:
 {
-  "website": null,
-  "confidence": 0.0,
-  "reason": "Short explanation."
-}
-
-or:
-
-{
-  "website": "https://example.com",
+  "website": "https://example.com" or null,
   "confidence": 0.0,
   "reason": "Short explanation."
 }
@@ -289,7 +223,7 @@ async def _request_website_discovery(
                     "type": "web_search",
                 }
             ],
-            max_output_tokens=300,
+            max_output_tokens=150,
             input=[
                 {
                     "role": "system",
