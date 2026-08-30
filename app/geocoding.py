@@ -40,12 +40,7 @@ async def reverse_geocode(
     latitude: float,
     longitude: float,
 ) -> str | None:
-    """
-    Resolve coordinates to the nearest town/city/locality.
-
-    This is best-effort. Geocoding failures return None and
-    never fail the quarry discovery pipeline.
-    """
+    """Resolve coordinates to the nearest town or locality."""
 
     key = (
         round(latitude, 5),
@@ -75,7 +70,6 @@ async def reverse_geocode(
             timeout=REQUEST_TIMEOUT,
             follow_redirects=True,
         ) as client:
-
             response = await client.get(
                 NOMINATIM_URL,
                 params=params,
@@ -83,7 +77,6 @@ async def reverse_geocode(
             )
 
             response.raise_for_status()
-
             data = response.json()
 
     except (
@@ -91,7 +84,6 @@ async def reverse_geocode(
         ValueError,
         TypeError,
     ) as exc:
-
         print(
             f"NOMINATIM FAILED: "
             f"{latitude},{longitude}: "
@@ -100,7 +92,6 @@ async def reverse_geocode(
         )
 
         _cache[key] = None
-
         return None
 
     if not isinstance(data, dict):
@@ -113,19 +104,6 @@ async def reverse_geocode(
         _cache[key] = None
         return None
 
-    # ---------------------------------------------------------
-    # Prefer the actual town/city/locality over the larger
-    # administrative municipality.
-    #
-    # Example:
-    #
-    # town         = Cormeilles-en-Parisis
-    # municipality = Argenteuil
-    #
-    # ORIS wants:
-    #
-    # Cormeilles-en-Parisis
-    # ---------------------------------------------------------
     municipality = (
         address.get("town")
         or address.get("city")
@@ -135,9 +113,7 @@ async def reverse_geocode(
     )
 
     if municipality:
-        municipality = str(
-            municipality
-        ).strip()
+        municipality = str(municipality).strip()
 
     _cache[key] = municipality
 
@@ -147,11 +123,7 @@ async def reverse_geocode(
 async def enrich_coordinates(
     coordinates: list[tuple[float, float]],
 ) -> dict[tuple[float, float], str | None]:
-    """
-    Resolve multiple coordinates sequentially.
-
-    Requests are cached and rate-limited.
-    """
+    """Resolve multiple coordinates sequentially."""
 
     results = {}
 

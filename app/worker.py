@@ -18,10 +18,7 @@ async def submit_job(job: Job) -> None:
 async def process_job(job: Job) -> None:
     """Process one queued job."""
 
-    print(
-        f"PROCESSING JOB: {job.job_id}",
-        flush=True,
-    )
+    print(f"PROCESSING JOB: {job.job_id}", flush=True)
 
     job.status = "running"
     job.progress = 0.05
@@ -48,9 +45,6 @@ async def process_job(job: Job) -> None:
             flush=True,
         )
 
-        # ---------------------------------------------------------
-        # Run the complete quarry pipeline.
-        # ---------------------------------------------------------
         result = await run_pipeline(
             latitude=latitude,
             longitude=longitude,
@@ -63,9 +57,6 @@ async def process_job(job: Job) -> None:
             flush=True,
         )
 
-        # ---------------------------------------------------------
-        # Store final result.
-        # ---------------------------------------------------------
         job.status = "completed"
         job.progress = 1.0
         job.result = result
@@ -79,9 +70,6 @@ async def process_job(job: Job) -> None:
         )
 
     except Exception as exc:
-        # ---------------------------------------------------------
-        # Store failure.
-        # ---------------------------------------------------------
         job.status = "failed"
         job.error = str(exc)
 
@@ -94,12 +82,9 @@ async def process_job(job: Job) -> None:
 
 
 async def worker() -> None:
-    """Continuously process jobs from the queue."""
+    """Process jobs from the queue."""
 
-    print(
-        "ORIS WORKER STARTED",
-        flush=True,
-    )
+    print("ORIS WORKER STARTED", flush=True)
 
     while True:
         job = await queue.get()

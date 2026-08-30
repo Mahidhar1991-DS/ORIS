@@ -1,14 +1,11 @@
 import hashlib
 import unicodedata
 from uuid import uuid4
-from app.llm_cost import CostTracker
 
+from app.llm_cost import CostTracker
 from app.crawler import crawl, crawl_with_status
 from app.database import save_site
-from app.discovery import (
-    deduplicate_quarries,
-    discover_quarries,
-)
+from app.discovery import deduplicate_quarries, discover_quarries
 from app.extraction import extract
 from app.models import (
     Document,
@@ -23,7 +20,6 @@ from app.models import (
 from app.website_discovery import discover_website
 
 
-
 SCRAPER_VERSION = "1.0.0"
 
 
@@ -31,16 +27,9 @@ async def process_quarry(
     site_id: str,
     website: str,
 ) -> ExtractionResult | None:
-    """
-    Crawl one quarry website and extract supported facts.
+    """Crawl and extract one quarry website."""
 
-    This function intentionally uses the original `crawl()`
-    interface so existing tests and callers remain compatible.
-    """
-
-    text = await crawl(
-        website
-    )
+    text = await crawl(website)
 
     if not text:
         return None
@@ -51,42 +40,25 @@ async def process_quarry(
         text=text,
     )
 
-    return await extract(
-        document
-    )
+    return await extract(document)
+
 
 def verify_extracted_location(
     extraction: ExtractionResult,
     quarry_municipality: str | None,
 ) -> ExtractionResult:
-    """
-    Apply a deterministic geographic consistency check.
-
-    The LLM may extract a city from the crawled website,
-    but the final verification is performed against the
-    municipality resolved for the OSM quarry.
-
-    A mismatch does not discard the extraction. It only
-    marks the location as unverified.
-    """
+    """Verify the extracted city against the quarry municipality."""
 
     if not quarry_municipality:
         return extraction
 
-    extracted_city = (
-        extraction.location_verification.extracted_city
-    )
+    extracted_city = extraction.location_verification.extracted_city
 
     if not extracted_city:
         return extraction
 
     def normalize(value: str) -> str:
-        import unicodedata
-
-        value = unicodedata.normalize(
-            "NFKD",
-            value,
-        )
+        value = unicodedata.normalize("NFKD", value)
 
         value = "".join(
             character
@@ -101,21 +73,13 @@ def verify_extracted_location(
             .split()
         )
 
-    expected = normalize(
-        quarry_municipality
-    )
-
-    actual = normalize(
-        extracted_city
-    )
+    expected = normalize(quarry_municipality)
+    actual = normalize(extracted_city)
 
     if expected == actual:
         extraction.location_verification.is_verified = True
         extraction.location_verification.confidence = 1.0
-        extraction.location_verification.method = (
-            "string_match"
-        )
-
+        extraction.location_verification.method = "string_match"
         return extraction
 
     extraction.location_verification.is_verified = False
@@ -124,12 +88,9 @@ def verify_extracted_location(
 
     return extraction
 
-def build_run_metadata(
-    text: str,
-) -> RunMetadata:
-    """
-    Build metadata for one extraction run.
-    """
+
+def build_run_metadata(text: str) -> RunMetadata:
+    """Build metadata for an extraction run."""
 
     prompt_hash = hashlib.sha256(
         text.encode("utf-8")
@@ -148,46 +109,20 @@ async def run_pipeline(
     radius_km: float,
     max_usd_cost: float | None = None,
 ) -> dict:
+    """Run quarry discovery and enrichment."""
 
     cost_tracker = CostTracker(
         max_usd_cost=max_usd_cost,
     )
-    """
-    Run quarry discovery and enrichment.
 
-    Pipeline:
-
-    1. Discover quarries from OpenStreetMap.
-    2. Deduplicate quarry records.
-    3. Use OSM website when available.
-    4. If no website exists, use AI website discovery.
-    5. Pass quarry name, municipality, and coordinates
-       to website discovery.
-    6. Crawl the discovered website.
-    7. Preserve the detailed crawler status.
-    8. Extract grounded information.
-    9. Persist the resulting SiteRecord.
-    """
-
-    # ---------------------------------------------------------
-    # Step 1: Discover quarries.
-    # ---------------------------------------------------------
     quarries = await discover_quarries(
         latitude,
         longitude,
         radius_km,
     )
 
-    # ---------------------------------------------------------
-    # Step 2: Deduplicate quarry records.
-    # ---------------------------------------------------------
-    quarries = deduplicate_quarries(
-        quarries
-    )
+    quarries = deduplicate_quarries(quarries)
 
-    # ---------------------------------------------------------
-    # Request information stored with each SiteRecord.
-    # ---------------------------------------------------------
     request = JobRequest(
         latitude=latitude,
         longitude=longitude,
@@ -197,28 +132,9 @@ async def run_pipeline(
 
     results = []
 
-    # ---------------------------------------------------------
-    # Process each quarry independently.
-    # ---------------------------------------------------------
     for quarry in quarries:
-
-        # -----------------------------------------------------
-        # Step 3: Use website already provided by OSM.
-        # -----------------------------------------------------
         website = quarry.website
 
-        # -----------------------------------------------------
-        # Step 4: If OSM has no website, use AI discovery.
-        #
-        # We pass:
-        #   - quarry name
-        #   - municipality
-        #   - latitude
-        #   - longitude
-        #
-        # This allows website discovery to work with both
-        # named and unnamed OSM quarry records.
-        # -----------------------------------------------------
         if not website:
             website = await discover_website(
                 quarry_name=quarry.name,
@@ -231,9 +147,6 @@ async def run_pipeline(
             if website:
                 quarry.website = website
 
-        # -----------------------------------------------------
-        # Step 5: No website found.
-        # -----------------------------------------------------
         if not website:
             results.append(
                 {
@@ -242,27 +155,10 @@ async def run_pipeline(
                     "status": "no_website",
                 }
             )
-
             continue
 
-        # -----------------------------------------------------
-        # Step 6: Crawl website with detailed status.
-        # -----------------------------------------------------
-        crawl_result = await crawl_with_status(
-            website
-        )
+        crawl_result = await crawl_with_status(website)
 
-        # -----------------------------------------------------
-        # Step 7: Preserve crawler failure reason.
-        #
-        # Examples:
-        #   http_403
-        #   http_404
-        #   http_429
-        #   robots_blocked
-        #   network_error
-        #   unsupported_content_type
-        # -----------------------------------------------------
         if crawl_result.status != "success":
             results.append(
                 {
@@ -271,14 +167,10 @@ async def run_pipeline(
                     "status": crawl_result.status,
                 }
             )
-
             continue
 
         text = crawl_result.text
 
-        # -----------------------------------------------------
-        # Protect against a successful status with no text.
-        # -----------------------------------------------------
         if not text:
             results.append(
                 {
@@ -287,34 +179,24 @@ async def run_pipeline(
                     "status": "empty_content",
                 }
             )
-
             continue
 
-        # -----------------------------------------------------
-        # Step 8: Create source document.
-        # -----------------------------------------------------
         document = Document(
             source_id=quarry.site_id,
             url=website,
             text=text,
         )
 
-        # -----------------------------------------------------
-        # Step 9: Extract grounded information.
-        # -----------------------------------------------------
         extraction = await extract(
-    document,
-    cost_tracker=cost_tracker,
-)
+            document,
+            cost_tracker=cost_tracker,
+        )
 
         extraction = verify_extracted_location(
             extraction=extraction,
             quarry_municipality=quarry.municipality,
         )
 
-        # -----------------------------------------------------
-        # Step 10: Create provenance source.
-        # -----------------------------------------------------
         content_hash = hashlib.sha256(
             text.encode("utf-8")
         ).hexdigest()
@@ -326,9 +208,6 @@ async def run_pipeline(
             content_hash=content_hash,
         )
 
-        # -----------------------------------------------------
-        # Step 11: Create SiteRecord.
-        # -----------------------------------------------------
         site_record = SiteRecord(
             site_id=quarry.site_id,
             input=request,
@@ -342,21 +221,11 @@ async def run_pipeline(
                 usd_cost=cost_tracker.usd_cost,
                 model_calls=cost_tracker.model_calls,
             ),
-            run_metadata=build_run_metadata(
-                text
-            ),
+            run_metadata=build_run_metadata(text),
         )
 
-        # -----------------------------------------------------
-        # Step 12: Persist SiteRecord.
-        # -----------------------------------------------------
-        save_site(
-            site_record
-        )
+        save_site(site_record)
 
-        # -----------------------------------------------------
-        # Step 13: Add successful result.
-        # -----------------------------------------------------
         results.append(
             {
                 "quarry": quarry,
@@ -365,9 +234,6 @@ async def run_pipeline(
             }
         )
 
-    # ---------------------------------------------------------
-    # Final pipeline result.
-    # ---------------------------------------------------------
     return {
         "count": len(results),
         "results": results,

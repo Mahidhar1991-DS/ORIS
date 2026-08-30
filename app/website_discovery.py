@@ -8,13 +8,13 @@ from openai import AsyncOpenAI
 
 from app.llm_cost import CostTracker, calculate_cost, create_model_call
 
-load_dotenv(".env")
 
+load_dotenv(".env")
 
 logger = logging.getLogger(__name__)
 
 
-SYSTEM_PROMPT = SYSTEM_PROMPT = """
+SYSTEM_PROMPT = """
 Identify the official website of the quarry or quarry operator.
 
 This is entity resolution, not website guessing.
@@ -67,34 +67,18 @@ BLOCKED_DOMAINS = {
 }
 
 
-def normalize_website(
-    url: str | None,
-) -> str | None:
-    """
-    Normalize and validate a candidate website.
-    """
+def normalize_website(url: str | None) -> str | None:
+    """Normalize and validate a candidate website."""
+
+    if not url or not isinstance(url, str):
+        return None
+
+    url = url.strip().strip("\"'<>")
 
     if not url:
         return None
 
-    if not isinstance(url, str):
-        return None
-
-    url = url.strip()
-
-    if not url:
-        return None
-
-    url = url.strip(
-        "\"'<>"
-    )
-
-    if not url:
-        return None
-
-    if not url.startswith(
-        ("http://", "https://")
-    ):
+    if not url.startswith(("http://", "https://")):
         url = f"https://{url}"
 
     try:
@@ -102,10 +86,7 @@ def normalize_website(
     except ValueError:
         return None
 
-    if (
-        parsed.scheme not in {"http", "https"}
-        or not parsed.netloc
-    ):
+    if parsed.scheme not in {"http", "https"} or not parsed.netloc:
         return None
 
     hostname = parsed.hostname
@@ -121,24 +102,14 @@ def normalize_website(
     return url
 
 
-def _parse_website_response(
-    text: str,
-) -> dict | None:
-    """
-    Parse the model response safely.
-
-    Handles common cases such as:
-    - normal JSON
-    - JSON wrapped in markdown fences
-    - JSON with surrounding whitespace
-    """
+def _parse_website_response(text: str) -> dict | None:
+    """Parse the model's JSON response."""
 
     if not text:
         return None
 
     text = text.strip()
 
-    # Remove markdown code fences if the model adds them.
     if text.startswith("```"):
         lines = text.splitlines()
 
@@ -171,29 +142,12 @@ async def _request_website_discovery(
     cost_tracker: CostTracker | None = None,
     purpose: str = "website_discovery",
 ) -> str | None:
-    """
-    Execute one website discovery request.
+    """Run one website discovery request."""
 
-    Uses structured JSON output so that the model is strongly
-    constrained to return the expected object.
-
-    When a CostTracker is supplied, actual token usage and
-    calculated USD cost are recorded after the request.
-    """
-
-    # ---------------------------------------------------------
-    # Check whether another LLM call is allowed.
-    #
-    # We cannot know the exact cost before the API request,
-    # because the final token usage is returned by OpenAI.
-    # Therefore the tracker prevents calls after the already
-    # accumulated budget has been exhausted.
-    # ---------------------------------------------------------
     if cost_tracker is not None:
         estimated_input_tokens = (
             len(SYSTEM_PROMPT) + len(prompt)
         ) // 4
-
         estimated_output_tokens = 300
 
         estimated_cost = calculate_cost(
@@ -206,9 +160,9 @@ async def _request_website_discovery(
             estimated_cost=estimated_cost
         ):
             logger.warning(
-                "Website discovery skipped because "
-                "estimated cost would exceed budget: "
-                "used=$%.8f estimated=$%.8f remaining=$%s",
+                "Website discovery skipped because estimated cost "
+                "would exceed budget: used=$%.8f estimated=$%.8f "
+                "remaining=$%s",
                 cost_tracker.usd_cost,
                 estimated_cost,
                 cost_tracker.remaining_usd,
@@ -265,7 +219,6 @@ async def _request_website_discovery(
                 }
             },
         )
-
     except Exception as exc:
         logger.exception(
             "Website discovery request failed: %s",
@@ -273,32 +226,14 @@ async def _request_website_discovery(
         )
         return None
 
-    # ---------------------------------------------------------
-    # Record actual token usage.
-    # ---------------------------------------------------------
     if cost_tracker is not None:
-        usage = getattr(
-            response,
-            "usage",
-            None,
-        )
+        usage = getattr(response, "usage", None)
 
         tokens_in = int(
-            getattr(
-                usage,
-                "input_tokens",
-                0,
-            )
-            or 0
+            getattr(usage, "input_tokens", 0) or 0
         )
-
         tokens_out = int(
-            getattr(
-                usage,
-                "output_tokens",
-                0,
-            )
-            or 0
+            getattr(usage, "output_tokens", 0) or 0
         )
 
         model_call = create_model_call(
@@ -308,14 +243,11 @@ async def _request_website_discovery(
             tokens_out=tokens_out,
         )
 
-        cost_tracker.record(
-            model_call
-        )
+        cost_tracker.record(model_call)
 
         logger.info(
-            "Website discovery usage: "
-            "purpose=%s input_tokens=%d output_tokens=%d "
-            "cost=$%.8f total=$%.8f",
+            "Website discovery usage: purpose=%s "
+            "input_tokens=%d output_tokens=%d cost=$%.8f total=$%.8f",
             purpose,
             tokens_in,
             tokens_out,
@@ -326,9 +258,7 @@ async def _request_website_discovery(
     text = response.output_text
 
     if not text:
-        logger.warning(
-            "Website discovery returned empty output."
-        )
+        logger.warning("Website discovery returned empty output.")
         return None
 
     return text
@@ -341,20 +271,9 @@ async def discover_website(
     municipality: str | None = None,
     cost_tracker: CostTracker | None = None,
 ) -> str | None:
-    """
-    Find a likely official website for a quarry.
+    """Find a likely official website for a quarry."""
 
-    The quarry name may be missing. In that case,
-    coordinate and municipality-based web discovery
-    is used.
-
-    The function deliberately returns None when identity
-    cannot be established with sufficient confidence.
-    """
-
-    api_key = os.getenv(
-        "OPENAI_API_KEY"
-    )
+    api_key = os.getenv("OPENAI_API_KEY")
 
     if not api_key:
         logger.warning(
@@ -363,9 +282,6 @@ async def discover_website(
         )
         return None
 
-    # ---------------------------------------------------------
-    # Quarry identity context.
-    # ---------------------------------------------------------
     if quarry_name:
         quarry_context = f"""
 Known quarry name:
@@ -390,9 +306,6 @@ Do not infer a quarry name simply because a company
 operates somewhere in the same region.
 """
 
-    # ---------------------------------------------------------
-    # Municipality context.
-    # ---------------------------------------------------------
     if municipality:
         municipality_context = f"""
 Known municipality:
@@ -415,9 +328,6 @@ Use the supplied coordinates to determine the likely
 geographic context during web search.
 """
 
-    # ---------------------------------------------------------
-    # AI discovery prompt.
-    # ---------------------------------------------------------
     prompt = f"""
 Identify the official website of the quarry represented
 by the following OpenStreetMap location.
@@ -506,36 +416,26 @@ Return only the required JSON object.
         longitude,
     )
 
-    client = AsyncOpenAI(
-        api_key=api_key
-    )
+    client = AsyncOpenAI(api_key=api_key)
 
     model = os.getenv(
         "OPENAI_MODEL",
         "gpt-5.4-mini",
     )
 
-    # ---------------------------------------------------------
-    # First attempt.
-    # ---------------------------------------------------------
     text = await _request_website_discovery(
-    client,
-    model,
-    prompt,
-    cost_tracker=cost_tracker,
-    purpose="website_discovery",
-)
+        client,
+        model,
+        prompt,
+        cost_tracker=cost_tracker,
+        purpose="website_discovery",
+    )
 
     if not text:
         return None
 
-    data = _parse_website_response(
-        text
-    )
+    data = _parse_website_response(text)
 
-    # ---------------------------------------------------------
-    # Retry once if the response is malformed.
-    # ---------------------------------------------------------
     if data is None:
         logger.warning(
             "Website discovery returned invalid JSON. "
@@ -584,9 +484,7 @@ The reason must be fewer than 20 words.
         if not text:
             return None
 
-        data = _parse_website_response(
-            text
-        )
+        data = _parse_website_response(text)
 
     if data is None:
         logger.warning(
@@ -595,12 +493,7 @@ The reason must be fewer than 20 words.
         )
         return None
 
-    # ---------------------------------------------------------
-    # Extract candidate website.
-    # ---------------------------------------------------------
-    website = normalize_website(
-        data.get("website")
-    )
+    website = normalize_website(data.get("website"))
 
     if not website:
         logger.info(
@@ -612,17 +505,8 @@ The reason must be fewer than 20 words.
         )
         return None
 
-    # ---------------------------------------------------------
-    # Validate confidence.
-    # ---------------------------------------------------------
     try:
-        confidence = float(
-            data.get(
-                "confidence",
-                0,
-            )
-        )
-
+        confidence = float(data.get("confidence", 0))
     except (TypeError, ValueError):
         confidence = 0.0
 
@@ -633,9 +517,6 @@ The reason must be fewer than 20 words.
         )
         return None
 
-    # ---------------------------------------------------------
-    # Conservative acceptance threshold.
-    # ---------------------------------------------------------
     if confidence < 0.80:
         logger.info(
             "Website rejected because confidence is too low: "
