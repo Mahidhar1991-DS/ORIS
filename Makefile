@@ -1,7 +1,43 @@
 .PHONY: bootstrap install test run extract docker-build docker-up docker-down clean
 
 bootstrap:
-	docker compose build
+	@set -e; \
+	if ! command -v docker >/dev/null 2>&1; then \
+		echo "Docker is required."; \
+		exit 1; \
+	fi; \
+	if [ ! -f .env ]; then \
+		printf "OpenAI API key: "; \
+		read -s OPENAI_API_KEY; \
+		echo; \
+		if [ -z "$$OPENAI_API_KEY" ]; then \
+			echo "OpenAI API key is required."; \
+			exit 1; \
+		fi; \
+		printf '%s\n' \
+			"OPENAI_API_KEY=$$OPENAI_API_KEY" \
+			"OPENAI_MODEL=gpt-5.4-mini" \
+			"MAX_USD_COST=0.10" \
+			"PORT=8001" > .env; \
+		echo "Created .env"; \
+	else \
+		echo ".env already exists"; \
+	fi; \
+	echo "Building ORIS..."; \
+	docker compose build; \
+	echo "Starting ORIS..."; \
+	docker compose up -d; \
+	echo "Waiting for ORIS..."; \
+	for i in $$(seq 1 30); do \
+		if curl -fsS http://127.0.0.1:8001/api/health >/dev/null 2>&1; then \
+			echo "ORIS is ready: http://localhost:8001"; \
+			exit 0; \
+		fi; \
+		sleep 2; \
+	done; \
+	echo "ORIS did not become ready."; \
+	docker compose logs --tail=50; \
+	exit 1
 
 install:
 	pip install -r requirements.txt

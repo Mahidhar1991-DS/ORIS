@@ -2,15 +2,8 @@ from dataclasses import dataclass, field
 
 from app.models import ModelCall
 
-
-# Standard API pricing per 1 million tokens.
-#
 # GPT-5.4 mini:
-#   Input:  $0.75 / 1M tokens
-#   Output: $4.50 / 1M tokens
-#
-# Keep pricing in one place so the rest of the application
-# does not contain duplicated cost calculations.
+
 MODEL_PRICING = {
     "gpt-5.4-mini": {
         "input_per_million": 0.75,
